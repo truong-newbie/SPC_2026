@@ -2,6 +2,13 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import SimplePeer, { Instance as PeerInstance } from 'simple-peer';
+
+declare module 'simple-peer' {
+    interface Options {
+        readableObjectMode?: boolean;
+    }
+}
+
 import { v4 as uuidv4 } from 'uuid';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useFileManagement } from '@/hooks/useFileManagement';
@@ -131,6 +138,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         const peer = new SimplePeer({
             initiator: true,
             trickle: true,
+            readableObjectMode: true,
             config: {
                 iceServers: ICE_SERVERS,
             },
@@ -234,6 +242,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         const peer = new SimplePeer({
             initiator: false,
             trickle: true,
+            readableObjectMode: true,
             config: {
                 iceServers: ICE_SERVERS,
             },
