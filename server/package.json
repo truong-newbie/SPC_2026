@@ -1,0 +1,22 @@
+{
+  "name": "spc-2026-server",
+  "version": "1.0.0",
+  "description": "SPC_2026 P2P File Transfer Signaling Server",
+  "main": "server.js",
+  "scripts": {
+    "test": "node --test",
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["p2p", "webrtc", "file-transfer"],
+  "author": "SPC_2026",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "helmet": "^7.1.0",
+    "socket.io": "^4.8.1",
+    "ws": "^8.18.0"
+  }
+}
