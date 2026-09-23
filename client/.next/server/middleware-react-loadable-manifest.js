@@ -1,0 +1,1 @@
+self.__REACT_LOADABLE_MANIFEST="{\"app\\\\page.tsx -> @/components/P2PTransfer\":{\"id\":\"app\\\\page.tsx -> @/components/P2PTransfer\",\"files\":[\"static/chunks/_app-pages-browser_components_P2PTransfer_tsx.js\"]}}"

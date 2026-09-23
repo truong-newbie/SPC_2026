@@ -11,6 +11,7 @@ import {
     classifyControl,
     metadataMessage,
     endMessage,
+    incompatibleMessage,
     checkCompat,
     compatErrorMessage,
     compatErrorFromIncompatible,

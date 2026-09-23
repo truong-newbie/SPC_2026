@@ -126,6 +126,34 @@ export function checkCompat(
     return { ok: false, localTooOld: remoteMin > localMax };
 }
 
+export function peerCompatErrorMessage(
+    localTooOld: boolean,
+    localVer: string,
+    remoteVer: string,
+    localMin: number,
+    localMax: number,
+    remoteMin: number,
+    remoteMax: number
+): string {
+    const youStr = `protocol ${remoteMin}-${remoteMax}${remoteVer ? ` (${remoteVer})` : ''}`;
+    const peerStr = `protocol ${localMin}-${localMax}${localVer ? ` (${localVer})` : ''}`;
+    if (localTooOld) {
+        return `Cannot transfer: peer's floe is too old.\n  You: ${youStr}  Peer: ${peerStr}\n  Ask the other side to update Floe.`;
+    }
+    return `Cannot transfer: your floe is too old for this peer.\n  You: ${youStr}  Peer: ${peerStr}\n  Update Floe to continue.`;
+}
+
+export function sanitizeDisplayText(text: string, maxChars: number = 300): string {
+    if (!text) return '';
+    if (text.length <= maxChars) return text;
+    let truncated = text.slice(0, maxChars);
+    const code = truncated.charCodeAt(truncated.length - 1);
+    if (code >= 0xD800 && code <= 0xDBFF) {
+        truncated = truncated.slice(0, -1);
+    }
+    return truncated;
+}
+
 export function compatErrorMessage(
     localTooOld: boolean,
     localVer: string,

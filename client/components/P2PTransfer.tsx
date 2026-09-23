@@ -1,19 +1,19 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import SimplePeer from 'simple-peer';
+import SimplePeer, { Instance as PeerInstance } from 'simple-peer';
 import { v4 as uuidv4 } from 'uuid';
 import { useSignaling } from '@/hooks/useSignaling';
 import { useFileManagement } from '@/hooks/useFileManagement';
 import { useRelayConfiguration } from '@/hooks/useRelayConfiguration';
-import { sendFiles, sendAbortReason } from '@/lib/transfer/sender';
+import { sendFiles } from '@/lib/transfer/sender';
 import { createReceiver, type ReceivedFile } from '@/lib/transfer/receiver';
 import { getRoomFromUrl, buildShareLink, isValidRoomId } from '@/lib/roomLink';
 import { formatBytes, formatSpeed, formatETA, downloadBlob } from '@/lib/download';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileCard } from './FileCard';
-import { Download, Upload, Copy, Check, Wifi, WifiOff, Loader2 } from 'lucide-react';
+import { Download, Upload, Copy, Check, Wifi, Loader2 } from 'lucide-react';
 
 // ICE Server configuration - STUN only by default
 const ICE_SERVERS = [
@@ -49,9 +49,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const [receivedFiles, setReceivedFiles] = useState<(ReceivedFile & { downloadUrl: string })[]>([]);
 
     // Peer refs
-    const peerRef = useRef<SimplePeer.Instance | null>(null);
-    const channelRef = useRef<RTCDataChannel | null>(null);
+    const peerRef = useRef<PeerInstance | null>(null);
     const destroyedRef = useRef(false);
+    const filesRef = useRef(files);
+    const hasJoinedRef = useRef(false);
+    const joinedRoomRef = useRef<string | null>(null);
+    const createdRoomRef = useRef<string | null>(null);
+
+    // Keep refs in sync
+    useEffect(() => { filesRef.current = files; }, [files]);
 
     // Signaling callbacks
     const onSignal = useCallback((data: { signal: unknown }) => {
@@ -88,69 +94,109 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         onReconnect,
     });
 
-    // Create peer with initiator flag based on role
-    const createPeer = useCallback((initiator: boolean) => {
+    // Check connection type (direct vs relay)
+    const checkConnectionType = async (peer: PeerInstance) => {
+        try {
+            const pc = (peer as any)._pc as RTCPeerConnection | undefined;
+            if (!pc) return;
+            const stats = await pc.getStats();
+            stats.forEach((report) => {
+                const r = report as any;
+                if (r.type === 'candidate-pair' && r.state === 'succeeded' && r.nominated) {
+                    const local = stats.get(r.localCandidateId);
+                    const remote = stats.get(r.remoteCandidateId);
+                    if (local?.candidateType === 'relay' || remote?.candidateType === 'relay') {
+                        setConnectionType('relay');
+                    } else {
+                        setConnectionType('direct');
+                    }
+                }
+            });
+        } catch {
+            // Ignore stats errors
+        }
+    };
+
+    // Start transfer (sender side)
+    const startTransfer = useCallback((userId: string) => {
         if (destroyedRef.current) return;
 
+        // Destroy old peer if exists
+        if (peerRef.current && !peerRef.current.destroyed) {
+            peerRef.current.destroy();
+        }
+
+        setStatus('Peer joined. Starting transfer...');
+
         const peer = new SimplePeer({
-            initiator,
+            initiator: true,
             trickle: true,
             config: {
                 iceServers: ICE_SERVERS,
             },
         });
 
-        peer.on('signal', (data) => {
-            signaling.sendSignal({ target: null, signal: data });
+        peer.on('signal', (signal) => {
+            signaling.sendSignal({ target: userId, signal });
         });
 
         peer.on('connect', () => {
-            setStatus('Connected! Preparing transfer...');
+            setStatus('Connected!');
             checkConnectionType(peer);
+
+            // Start sending files
+            const filesToSend = filesRef.current;
+            if (filesToSend.length === 0) {
+                setStatus('Connected. Waiting...');
+                return;
+            }
+
+            setStatus('Sending files...');
+            const peerForSender = peer;
+
+            const channel = (peer as any)._channel as RTCDataChannel | undefined;
+
+            sendFiles(
+                {
+                    send: (d: string | Uint8Array) => peerForSender.send(d),
+                    onData: (h: (data: string | Uint8Array | ArrayBuffer) => void) => {
+                        peerForSender.on('data', h);
+                        return () => peerForSender.off('data', h);
+                    },
+                    channel: channel as any,
+                },
+                filesToSend.map((f) => ({ id: f.id, file: f.file })),
+                {
+                    onFileStart: (index, total, fileName) => {
+                        setStatus(`Sending file ${index + 1} of ${total}: ${fileName}`);
+                        setCurrentFileName(fileName);
+                        setProgress(0);
+                    },
+                    onProgress: (percent) => setProgress(percent),
+                    onSpeed: (bps, eta) => {
+                        setTransferSpeed(formatSpeed(bps));
+                        setEstimatedTime(formatETA(eta));
+                    },
+                    onSpeedReset: () => {
+                        setTransferSpeed('');
+                        setEstimatedTime('');
+                    },
+                    onAllSent: () => {
+                        setProgress(100);
+                        setStatus('All files sent!');
+                    },
+                    onError: (msg) => {
+                        setError(msg);
+                        setStatus('Transfer failed');
+                    },
+                    isDestroyed: () => destroyedRef.current || peer.destroyed,
+                }
+            );
         });
 
         peer.on('data', (data) => {
+            // Sender receives ack messages
             if (destroyedRef.current) return;
-            const rx = createReceiver({
-                send: (d) => peer.send(d),
-                onFileStart: (index, total, fileName, fileSize) => {
-                    setStatus(`Receiving file ${index + 1} of ${total}: ${fileName}`);
-                    setCurrentFileName(fileName);
-                    setProgress(0);
-                },
-                onProgress: (percent) => setProgress(percent),
-                onSpeed: (bps, eta) => {
-                    setTransferSpeed(formatSpeed(bps));
-                    setEstimatedTime(formatETA(eta));
-                },
-                onSpeedReset: () => {
-                    setTransferSpeed('');
-                    setEstimatedTime('');
-                },
-                onFileComplete: (file, index, total) => {
-                    const url = URL.createObjectURL(file.blob);
-                    setReceivedFiles((prev) => [...prev, { ...file, downloadUrl: url }]);
-                    if (index === total) {
-                        setStatus('Transfer complete!');
-                    } else {
-                        setStatus(`Waiting for next file...`);
-                    }
-                },
-                onAllComplete: () => {
-                    setProgress(100);
-                    setStatus('All files received!');
-                },
-                onWaiting: () => setStatus('Waiting for next file...'),
-                onError: (msg) => {
-                    setError(msg);
-                    setStatus('Transfer failed');
-                },
-            });
-            rx.handleMessage(data);
-        });
-
-        peer.on('stream', () => {
-            // Not using streams for file transfer
         });
 
         peer.on('close', () => {
@@ -168,111 +214,118 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         });
 
         peerRef.current = peer;
-
-        // Get data channel once established
-        peer.on('channel', (channel) => {
-            channelRef.current = channel;
-            channel.binaryType = 'arraybuffer';
-
-            if (initiator && files.length > 0) {
-                // Start sending files as sender
-                setStatus('Sending files...');
-                sendFiles(
-                    {
-                        send: (d) => channel.send(d),
-                        onData: (h) => { channel.on('data', h); return () => channel.off('data', h); },
-                        channel,
-                    },
-                    files.map((f) => ({ id: f.id, file: f.file })),
-                    {
-                        onFileStart: (index, total, fileName) => {
-                            setStatus(`Sending file ${index + 1} of ${total}: ${fileName}`);
-                            setCurrentFileName(fileName);
-                            setProgress(0);
-                        },
-                        onProgress: (percent) => setProgress(percent),
-                        onSpeed: (bps, eta) => {
-                            setTransferSpeed(formatSpeed(bps));
-                            setEstimatedTime(formatETA(eta));
-                        },
-                        onSpeedReset: () => {
-                            setTransferSpeed('');
-                            setEstimatedTime('');
-                        },
-                        onAllSent: () => {
-                            setProgress(100);
-                            setStatus('All files sent!');
-                        },
-                        onError: (msg) => {
-                            setError(msg);
-                            setStatus('Transfer failed');
-                        },
-                        isDestroyed: () => destroyedRef.current,
-                    }
-                );
-            }
-        });
-    }, [files, signaling]);
-
-    // Check connection type (direct vs relay)
-    const checkConnectionType = async (peer: SimplePeer.Instance) => {
-        try {
-            const pc = (peer as any)._pc as RTCPeerConnection;
-            const stats = await pc.getStats();
-            stats.forEach((report: RTCStatsReport) => {
-                if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.nominated) {
-                    const local = stats.get(report.localCandidateId);
-                    const remote = stats.get(report.remoteCandidateId);
-                    if (local?.candidateType === 'relay' || remote?.candidateType === 'relay') {
-                        setConnectionType('relay');
-                    } else {
-                        setConnectionType('direct');
-                    }
-                }
-            });
-        } catch {
-            // Ignore stats errors
-        }
-    };
-
-    // Handle room joined
-    useEffect(() => {
-        signaling.onRoomJoined(({ role }) => {
-            if (destroyedRef.current) return;
-            setStatus('Waiting for peer...');
-            const initiator = role === 'sender';
-            createPeer(initiator);
-        });
-    }, [signaling, createPeer]);
-
-    // Handle user connected (sender side)
-    useEffect(() => {
-        signaling.onUserConnected(() => {
-            if (destroyedRef.current) return;
-            setStatus('Peer connected! Setting up connection...');
-        });
     }, [signaling]);
 
-    // Handle room full
-    useEffect(() => {
+    // Receiver: join room and create peer
+    const joinAsReceiver = useCallback((roomId: string) => {
+        if (hasJoinedRef.current) return;
+        hasJoinedRef.current = true;
+        joinedRoomRef.current = roomId;
+
+        setStatus('Connecting...');
+
         signaling.onRoomFull(() => {
-            setError('Room is full');
-            setStatus('Room full');
+            setError('Link Expired or Busy');
+            setStatus('Access Denied');
         });
+
+        signaling.joinRoom(roomId);
+
+        const peer = new SimplePeer({
+            initiator: false,
+            trickle: true,
+            config: {
+                iceServers: ICE_SERVERS,
+            },
+        });
+
+        peer.on('signal', (signal) => {
+            signaling.sendSignal({ target: null, signal });
+        });
+
+        peer.on('connect', () => {
+            setStatus('Connected!');
+            checkConnectionType(peer);
+        });
+
+        // Receiver handles incoming data
+        const rx = createReceiver({
+            send: (d) => peer.send(d),
+            onFileStart: (index, total, fileName, fileSize) => {
+                setStatus(`Receiving file ${index} of ${total}: ${fileName}`);
+                setCurrentFileName(fileName);
+                setProgress(0);
+            },
+            onProgress: (percent) => setProgress(percent),
+            onSpeed: (bps, eta) => {
+                setTransferSpeed(formatSpeed(bps));
+                setEstimatedTime(formatETA(eta));
+            },
+            onSpeedReset: () => {
+                setTransferSpeed('');
+                setEstimatedTime('');
+            },
+            onFileComplete: (file, index, total) => {
+                const url = URL.createObjectURL(file.blob);
+                setReceivedFiles((prev) => [...prev, { ...file, downloadUrl: url }]);
+                if (index === total) {
+                    setStatus('Transfer complete!');
+                } else {
+                    setStatus(`Waiting for next file...`);
+                }
+            },
+            onAllComplete: () => {
+                setProgress(100);
+                setStatus('All files received!');
+            },
+            onWaiting: () => setStatus('Waiting for next file...'),
+            onError: (msg) => {
+                setError(msg);
+                setStatus('Transfer failed');
+            },
+        });
+
+        peer.on('data', (data) => {
+            if (destroyedRef.current) return;
+            rx.handleMessage(data);
+        });
+
+        peer.on('close', () => {
+            if (!destroyedRef.current) {
+                setError('Connection closed');
+                setStatus('Connection closed');
+            }
+        });
+
+        peer.on('error', (err) => {
+            if (!destroyedRef.current) {
+                setError(`Connection error: ${err.message}`);
+                setStatus('Connection error');
+            }
+        });
+
+        peerRef.current = peer;
     }, [signaling]);
 
-    // Join room if receiver
+    // Register onUserConnected handler at top level (BEFORE any joinRoom calls)
     useEffect(() => {
-        if (roomId && isReceiver && signaling.isConnected) {
-            if (isValidRoomId(roomId)) {
-                signaling.joinRoom(roomId);
-            } else {
-                setError('Invalid room ID');
-            }
-        }
-    }, [roomId, isReceiver, signaling.isConnected, signaling.joinRoom]);
+        signaling.onUserConnected((userId: string) => {
+            startTransfer(userId);
+        });
+    }, [signaling, startTransfer]);
 
-    // Generate share link
+    // Receiver: mount and join room
+    useEffect(() => {
+        if (!roomId || !isReceiver || !signaling.isConnected) return;
+
+        if (isValidRoomId(roomId)) {
+            joinAsReceiver(roomId);
+        } else {
+            setError('Invalid Room ID');
+        }
+    }, [roomId, isReceiver, signaling.isConnected, joinAsReceiver]);
+
+    // Generate share link (sender side)
     const handleCreateLink = () => {
         if (files.length === 0) {
             setError('Please select at least one file');
@@ -284,11 +337,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         const link = buildShareLink(window.location.origin, newRoomId, nonce);
 
         setGeneratedLink(link);
-        setStatus('Waiting for receiver...');
+        createdRoomRef.current = newRoomId;
+        setStatus('Waiting for peer...');
 
-        if (signaling.isConnected) {
-            signaling.joinRoom(newRoomId);
-        }
+        signaling.joinRoom(newRoomId);
     };
 
     // Copy link to clipboard
