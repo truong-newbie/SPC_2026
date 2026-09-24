@@ -15,6 +15,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
 
+// Swarm Tracker
+const swarm = require('./swarm');
+
 // ---------------------------------------------------------------------------
 // App Setup
 // ---------------------------------------------------------------------------
@@ -272,6 +275,20 @@ app.get('/api/stats', (_req, res) => {
     res.json({ totalBytes: cachedTotal });
 });
 
+// GET /api/swarm/stats
+app.get('/api/swarm/stats', (_req, res) => {
+    res.json(swarm.getStats());
+});
+
+// GET /api/swarm/:fileId
+app.get('/api/swarm/:fileId', (req, res) => {
+    const info = swarm.getSwarmInfo(req.params.fileId);
+    if (!info) {
+        return res.status(404).json({ error: 'Swarm not found' });
+    }
+    res.json(info);
+});
+
 // POST /api/stats/report
 app.post('/api/stats/report', (req, res) => {
     const ip = rateKey(req.ip);
@@ -506,6 +523,76 @@ function handleDisconnect(peer) {
 }
 
 // ---------------------------------------------------------------------------
+// Swarm Handlers (for WebSocket/CLI)
+// ---------------------------------------------------------------------------
+
+function sendWS(ws, type, data) {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type, ...data }));
+}
+
+function handleSwarmCreate(ws, data) {
+    const { fileId, totalPieces, fileHash } = data || {};
+    if (!fileId || !totalPieces) {
+        sendWS(ws, 'error', { message: 'Missing fileId or totalPieces' });
+        return;
+    }
+    const result = swarm.createSwarm(fileId, totalPieces, fileHash);
+    if (result.success) {
+        sendWS(ws, 'swarm-created', { fileId });
+    } else {
+        sendWS(ws, 'error', { message: result.error });
+    }
+}
+
+function handleSwarmJoin(ws, data) {
+    const { fileId } = data || {};
+    if (!fileId) {
+        sendWS(ws, 'error', { message: 'Missing fileId' });
+        return;
+    }
+    const peerId = ws.peerId;
+    const result = swarm.joinSwarm(fileId, peerId);
+    if (result.success) {
+        sendWS(ws, 'swarm-info', result.swarmInfo);
+    } else {
+        sendWS(ws, 'error', { message: result.error });
+    }
+}
+
+function handleSwarmLeave(ws, data) {
+    const { fileId } = data || {};
+    if (!fileId) return;
+    const peerId = ws.peerId;
+    swarm.leaveSwarm(fileId, peerId);
+}
+
+function handleSwarmAnnounce(ws, data) {
+    const { fileId, pieces } = data || {};
+    if (!fileId || !Array.isArray(pieces)) return;
+    const peerId = ws.peerId;
+    swarm.announcePieces(fileId, peerId, pieces);
+}
+
+function handleSwarmRequestPiece(ws, data) {
+    const { fileId, pieceIndex } = data || {};
+    if (!fileId || pieceIndex === undefined) return;
+    const peerId = ws.peerId;
+    const peersWithPiece = swarm.getPeersWithPiece(fileId, pieceIndex)
+        .filter(id => id !== peerId);
+    if (peersWithPiece.length > 0) {
+        sendWS(ws, 'piece-available', { fileId, pieceIndex, peers: peersWithPiece });
+    }
+}
+
+function handleSwarmInfo(ws, data) {
+    const { fileId } = data || {};
+    if (!fileId) return;
+    const info = swarm.getSwarmInfo(fileId);
+    sendWS(ws, 'swarm-info', info || {});
+}
+
+// ---------------------------------------------------------------------------
 // HTTP Server
 // ---------------------------------------------------------------------------
 
@@ -546,8 +633,101 @@ io.on('connection', (socket) => {
         handleSignal(peer, data.signal, data.target || null);
     });
 
+    // -------------------------------------------------------------------------
+    // Swarm Events (1-N file sharing)
+    // -------------------------------------------------------------------------
+
+    socket.on('create-swarm', (data) => {
+        const { fileId, totalPieces, fileHash } = data || {};
+        if (!fileId || !totalPieces) {
+            socket.emit('error', { message: 'Missing fileId or totalPieces' });
+            return;
+        }
+        const result = swarm.createSwarm(fileId, totalPieces, fileHash);
+        if (result.success) {
+            socket.emit('swarm-created', { fileId });
+        } else {
+            socket.emit('error', { message: result.error });
+        }
+    });
+
+    socket.on('join-swarm', (data) => {
+        const { fileId } = data || {};
+        if (!fileId) {
+            socket.emit('error', { message: 'Missing fileId' });
+            return;
+        }
+        const peerId = socket.id;
+        const result = swarm.joinSwarm(fileId, peerId);
+        if (result.success) {
+            socket.join(fileId); // Join Socket.IO room for broadcast
+            socket.emit('swarm-info', result.swarmInfo);
+            // Notify other peers
+            socket.to(fileId).emit('peer-joined', { peerId, fileId });
+        } else {
+            socket.emit('error', { message: result.error });
+        }
+    });
+
+    socket.on('leave-swarm', (data) => {
+        const { fileId } = data || {};
+        if (!fileId) return;
+        const peerId = socket.id;
+        const result = swarm.leaveSwarm(fileId, peerId);
+        if (result.success) {
+            socket.leave(fileId);
+            socket.to(fileId).emit('peer-left', { peerId, fileId });
+        }
+    });
+
+    socket.on('announce-pieces', (data) => {
+        const { fileId, pieces } = data || {};
+        if (!fileId || !Array.isArray(pieces)) return;
+        const peerId = socket.id;
+        const result = swarm.announcePieces(fileId, peerId, pieces);
+        if (result.success) {
+            // Notify others about new pieces
+            socket.to(fileId).emit('peer-pieces', { peerId, pieces });
+        }
+    });
+
+    socket.on('request-piece', (data) => {
+        const { fileId, pieceIndex } = data || {};
+        if (!fileId || pieceIndex === undefined) return;
+        const peerId = socket.id;
+
+        // Find peers with this piece
+        const peersWithPiece = swarm.getPeersWithPiece(fileId, pieceIndex)
+            .filter(id => id !== peerId);
+
+        if (peersWithPiece.length > 0) {
+            // Notify requester who has the piece
+            socket.emit('piece-available', {
+                fileId,
+                pieceIndex,
+                peers: peersWithPiece,
+            });
+        }
+    });
+
+    socket.on('get-swarm-info', (data) => {
+        const { fileId } = data || {};
+        if (!fileId) return;
+        const info = swarm.getSwarmInfo(fileId);
+        socket.emit('swarm-info', info);
+    });
+
     socket.on('disconnecting', () => {
         handleDisconnect(peer);
+        // Handle swarm cleanup
+        const peerId = socket.id;
+        const peerInfo = swarm.getPeerInfo(peerId);
+        if (peerInfo) {
+            for (const file of peerInfo.files) {
+                swarm.leaveSwarm(file.fileId, peerId);
+                socket.to(file.fileId).emit('peer-left', { peerId, fileId: file.fileId });
+            }
+        }
     });
 });
 
@@ -621,6 +801,25 @@ wss.on('connection', (ws, req) => {
                 break;
             case 'ping':
                 ws.send(JSON.stringify({ type: 'pong' }));
+                break;
+            // Swarm events
+            case 'create-swarm':
+                handleSwarmCreate(ws, msg);
+                break;
+            case 'join-swarm':
+                handleSwarmJoin(ws, msg);
+                break;
+            case 'leave-swarm':
+                handleSwarmLeave(ws, msg);
+                break;
+            case 'announce-pieces':
+                handleSwarmAnnounce(ws, msg);
+                break;
+            case 'request-piece':
+                handleSwarmRequestPiece(ws, msg);
+                break;
+            case 'get-swarm-info':
+                handleSwarmInfo(ws, msg);
                 break;
         }
     });
