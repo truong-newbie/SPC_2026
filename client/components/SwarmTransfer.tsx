@@ -79,6 +79,35 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             setError('Connection failed. Check if server is running.');
         });
 
+        // Swarm events
+        socket.on('swarm-info', (info: any) => {
+            if (swarmRef.current) {
+                swarmRef.current.handleSwarmInfo(info);
+            }
+        });
+
+        socket.on('peer-joined', ({ peerId }: { peerId: string }) => {
+            if (swarmRef.current) {
+                swarmRef.current.handlePeerJoined(peerId);
+            }
+        });
+
+        socket.on('peer-left', ({ peerId }: { peerId: string }) => {
+            if (swarmRef.current) {
+                swarmRef.current.handlePeerLeft(peerId);
+            }
+        });
+
+        socket.on('peer-pieces', ({ peerId, pieces }: { peerId: string; pieces: number[] }) => {
+            if (swarmRef.current) {
+                swarmRef.current.handlePeerPieces(peerId, pieces);
+            }
+        });
+
+        socket.on('piece-available', ({ fileId, pieceIndex, peers }: { fileId: string; pieceIndex: number; peers: string[] }) => {
+            console.log('Piece available:', { fileId, pieceIndex, peers });
+        });
+
         socketRef.current = socket;
 
         return () => {
@@ -158,8 +187,9 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
 
             swarmRef.current = swarm;
 
-            // Create share link
-            const link = `${window.location.origin}?swarm=${fileId}`;
+            // Create share link with file info
+            const totalPieces = Math.ceil(selectedFile.size / (512 * 1024));
+            const link = `${window.location.origin}?swarm=${fileId}&name=${encodeURIComponent(selectedFile.name)}&size=${selectedFile.size}&pieces=${totalPieces}`;
             setShareLink(link);
             setPassword(pw);
             setStatus(`Seeding: ${selectedFile.name}`);
@@ -174,26 +204,31 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const handleJoinSwarm = useCallback(() => {
         if (!downloadLink || !socketRef.current) return;
 
-        // Extract fileId from link
+        // Extract file info from link
         const url = new URL(downloadLink);
         const fileId = url.searchParams.get('swarm');
+        const fileName = url.searchParams.get('name') || 'downloaded-file';
+        const fileSize = parseInt(url.searchParams.get('size') || '0', 10);
+
         if (!fileId) {
             setError('Invalid swarm link');
+            return;
+        }
+
+        if (fileSize === 0) {
+            setError('Invalid file info in link');
             return;
         }
 
         setIsDownloading(true);
         setStatus('Connecting to swarm...');
 
-        // Join swarm
-        socketRef.current.emit('join-swarm', { fileId });
-
-        // Create swarm manager
+        // Create swarm manager with file info
         const swarm = new SwarmManager(
             {
                 fileId,
-                fileName: 'Downloading...',
-                fileSize: 0, // Will be updated when we get swarm info
+                fileName: decodeURIComponent(fileName),
+                fileSize,
             },
             socketRef.current,
             {
@@ -218,6 +253,18 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         );
 
         swarmRef.current = swarm;
+
+        // Join swarm - emit AFTER swarm manager is ready
+        // Check socket is connected first
+        if (socketRef.current?.connected) {
+            socketRef.current.emit('join-swarm', { fileId });
+        } else {
+            // Wait for connection then emit
+            socketRef.current?.once('connect', () => {
+                socketRef.current?.emit('join-swarm', { fileId });
+            });
+        }
+
         swarm.startDownloading();
 
     }, [downloadLink]);

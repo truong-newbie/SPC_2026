@@ -89,8 +89,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     }, []);
 
     const onReconnect = useCallback(() => {
+        // Reset join state so user can reconnect
+        hasJoinedRef.current = false;
+        joinedRoomRef.current = null;
         setError('');
-        setStatus(isReceiver ? 'Reconnecting...' : 'Select files to send');
+        setStatus(isReceiver ? 'Reconnected. Click link again.' : 'Select files to send');
     }, [isReceiver]);
 
     const signaling = useSignaling({
