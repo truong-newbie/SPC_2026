@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 
 // Dynamic import to avoid SSR issues with WebRTC and Socket.IO
@@ -30,6 +30,15 @@ const SwarmTransfer = dynamic(() => import('@/components/SwarmTransfer'), {
 
 export default function Home() {
     const [mode, setMode] = useState<'p2p' | 'swarm'>('p2p');
+
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('swarm')) {
+                setMode('swarm');
+            }
+        }
+    }, []);
 
     return (
         <div className="min-h-screen">

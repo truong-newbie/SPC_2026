@@ -17,16 +17,11 @@ import { sendFiles } from '@/lib/transfer/sender';
 import { createReceiver, type ReceivedFile } from '@/lib/transfer/receiver';
 import { getRoomFromUrl, buildShareLink, isValidRoomId } from '@/lib/roomLink';
 import { formatBytes, formatSpeed, formatETA, downloadBlob } from '@/lib/download';
+import { DEFAULT_ICE_SERVERS, fetchIceServers, filterIceServers } from '@/lib/relay';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileCard } from './FileCard';
 import { Download, Upload, Copy, Check, Wifi, Loader2 } from 'lucide-react';
-
-// ICE Server configuration - STUN only by default
-const ICE_SERVERS = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-];
 
 interface P2PTransferProps {
     className?: string;
@@ -51,6 +46,13 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     // File management
     const { files, isDragging, totalBytes, handleFileSelection, handleDeleteFile, handleDragOver, handleDragLeave, handleDrop } = useFileManagement();
     const { relayEnabled } = useRelayConfiguration();
+    const [rawIceServers, setRawIceServers] = useState<RTCIceServer[]>(DEFAULT_ICE_SERVERS);
+
+    useEffect(() => {
+        fetchIceServers().then(setRawIceServers).catch(() => {});
+    }, []);
+
+    const effectiveIceServers = filterIceServers(rawIceServers, relayEnabled);
 
     // Received files
     const [receivedFiles, setReceivedFiles] = useState<(ReceivedFile & { downloadUrl: string })[]>([]);
@@ -143,7 +145,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             trickle: true,
             readableObjectMode: true,
             config: {
-                iceServers: ICE_SERVERS,
+                iceServers: effectiveIceServers,
             },
         });
 
@@ -247,7 +249,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             trickle: true,
             readableObjectMode: true,
             config: {
-                iceServers: ICE_SERVERS,
+                iceServers: effectiveIceServers,
             },
         });
 

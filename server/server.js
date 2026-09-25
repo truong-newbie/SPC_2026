@@ -118,14 +118,45 @@ function checkRateLimit(ip) {
 // TURN Credentials Generation
 // ---------------------------------------------------------------------------
 
-const STUN_FALLBACK = [
+const DEFAULT_ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:openrelay.metered.ca:80' },
+    {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
 ];
+
+const STUN_FALLBACK = DEFAULT_ICE_SERVERS;
 
 const turnRateLimits = new Map();
 const TURN_RATE_WINDOW = 60000;
 const MAX_TURN_REQUESTS = parseInt(process.env.MAX_TURN_REQUESTS_PER_IP || '20', 10);
+
+function getStaticTurnCredentials() {
+    const turnUrl = process.env.TURN_URL;
+    const turnUsername = process.env.TURN_USERNAME;
+    const turnCredential = process.env.TURN_CREDENTIAL || process.env.TURN_PASSWORD;
+    if (turnUrl && turnUsername && turnCredential) {
+        return [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: turnUrl, username: turnUsername, credential: turnCredential }
+        ];
+    }
+    return null;
+}
 
 function generateCoturnCredentials() {
     const turnSecret = process.env.TURN_SECRET;
@@ -211,8 +242,21 @@ async function startCloudflareMint() {
     }
 }
 
+async function getIceServersConfig() {
+    const cf = await generateCloudflareIceServers();
+    if (cf && Array.isArray(cf) && cf.length > 0) return cf;
+
+    const coturn = generateCoturnCredentials();
+    if (coturn && Array.isArray(coturn) && coturn.length > 0) return coturn;
+
+    const staticTurn = getStaticTurnCredentials();
+    if (staticTurn && Array.isArray(staticTurn) && staticTurn.length > 0) return staticTurn;
+
+    return DEFAULT_ICE_SERVERS;
+}
+
 // GET /api/turn-credentials
-app.get('/api/turn-credentials', (req, res) => {
+app.get('/api/turn-credentials', async (req, res) => {
     const ip = rateKey(req.ip);
     const now = Date.now();
 
@@ -224,8 +268,8 @@ app.get('/api/turn-credentials', (req, res) => {
     timestamps.push(now);
     turnRateLimits.set(ip, timestamps);
 
-    const credentials = generateCloudflareIceServers() || generateCoturnCredentials();
-    res.json(credentials || STUN_FALLBACK);
+    const servers = await getIceServersConfig();
+    res.json(servers);
 });
 
 // ---------------------------------------------------------------------------
@@ -495,13 +539,33 @@ function handleJoinRoom(peer, roomId) {
 
 function handleSignal(senderPeer, signal, targetId) {
     if (!signal) return;
+
+    if (targetId) {
+        // Direct target routing (used by Swarm and direct P2P)
+        if (typeof io !== 'undefined' && io && io.sockets) {
+            const targetSocket = io.sockets.sockets.get(targetId);
+            if (targetSocket) {
+                targetSocket.emit('signal', { signal, sender: senderPeer.id });
+                return;
+            }
+        }
+        if (typeof wss !== 'undefined' && wss && wss.clients) {
+            for (const client of wss.clients) {
+                if (client.peerId === targetId && client.readyState === WebSocket.OPEN) {
+                    sendWS(client, 'signal', { signal, sender: senderPeer.id });
+                    return;
+                }
+            }
+        }
+    }
+
+    // Room-based routing fallback (1-to-1 rooms)
     if (!senderPeer.roomId) return;
     const room = rooms.get(senderPeer.roomId);
     if (!room) return;
 
     const targetPeer = room.find(p => p.id !== senderPeer.id);
     if (!targetPeer) return;
-    if (targetId && targetPeer.id !== targetId) return;
 
     try {
         targetPeer.send('signal', { signal, sender: senderPeer.id });
@@ -532,12 +596,12 @@ function sendWS(ws, type, data) {
 }
 
 function handleSwarmCreate(ws, data) {
-    const { fileId, totalPieces, fileHash } = data || {};
+    const { fileId, totalPieces, fileHash, fileName, fileSize } = data || {};
     if (!fileId || !totalPieces) {
         sendWS(ws, 'error', { message: 'Missing fileId or totalPieces' });
         return;
     }
-    const result = swarm.createSwarm(fileId, totalPieces, fileHash);
+    const result = swarm.createSwarm(fileId, totalPieces, fileHash, fileName, fileSize);
     if (result.success) {
         sendWS(ws, 'swarm-created', { fileId });
     } else {
@@ -633,17 +697,24 @@ io.on('connection', (socket) => {
         handleSignal(peer, data.signal, data.target || null);
     });
 
+    socket.on('get-turn-credentials', async (callback) => {
+        if (typeof callback === 'function') {
+            const servers = await getIceServersConfig();
+            callback(servers);
+        }
+    });
+
     // -------------------------------------------------------------------------
     // Swarm Events (1-N file sharing)
     // -------------------------------------------------------------------------
 
     socket.on('create-swarm', (data) => {
-        const { fileId, totalPieces, fileHash } = data || {};
+        const { fileId, totalPieces, fileHash, fileName, fileSize } = data || {};
         if (!fileId || !totalPieces) {
             socket.emit('error', { message: 'Missing fileId or totalPieces' });
             return;
         }
-        const result = swarm.createSwarm(fileId, totalPieces, fileHash);
+        const result = swarm.createSwarm(fileId, totalPieces, fileHash, fileName, fileSize);
         if (result.success) {
             socket.emit('swarm-created', { fileId });
         } else {
@@ -688,6 +759,11 @@ io.on('connection', (socket) => {
         if (result.success) {
             // Notify others about new pieces
             socket.to(fileId).emit('peer-pieces', { peerId, pieces });
+            // Broadcast updated swarm-info to all peers in the room
+            const updatedInfo = swarm.getSwarmInfo(fileId);
+            if (updatedInfo) {
+                io.to(fileId).emit('swarm-info', updatedInfo);
+            }
         }
     });
 
@@ -801,6 +877,11 @@ wss.on('connection', (ws, req) => {
                 break;
             case 'ping':
                 ws.send(JSON.stringify({ type: 'pong' }));
+                break;
+            case 'get-turn-credentials':
+                getIceServersConfig().then(servers => {
+                    sendWS(ws, 'turn-credentials', { servers });
+                });
                 break;
             // Swarm events
             case 'create-swarm':

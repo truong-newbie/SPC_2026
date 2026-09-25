@@ -31,9 +31,11 @@ const SWARM_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
  * @param {string} fileId - Unique file identifier
  * @param {number} totalPieces - Total number of pieces
  * @param {string} [fileHash] - Optional hash for verification
+ * @param {string} [fileName] - Optional file name
+ * @param {number} [fileSize] - Optional file size in bytes
  * @returns {{ success: boolean, error?: string }}
  */
-function createSwarm(fileId, totalPieces, fileHash = null) {
+function createSwarm(fileId, totalPieces, fileHash = null, fileName = null, fileSize = null) {
     if (swarms.has(fileId)) {
         return { success: false, error: 'Swarm already exists' };
     }
@@ -51,12 +53,14 @@ function createSwarm(fileId, totalPieces, fileHash = null) {
         totalPieces,
         createdAt: Date.now(),
         fileHash,
+        fileName: fileName || null,
+        fileSize: typeof fileSize === 'number' ? fileSize : null,
     };
 
     swarms.set(fileId, swarmData);
     pieceAvailability.set(fileId, new Map());
 
-    console.log(`[Swarm] Created: ${fileId} with ${totalPieces} pieces`);
+    console.log(`[Swarm] Created: ${fileId} with ${totalPieces} pieces (${fileName || 'unnamed'}, ${fileSize || 0} bytes)`);
 
     return { success: true };
 }
@@ -167,9 +171,13 @@ function announcePieces(fileId, peerId, pieces) {
         return { success: false, error: 'Swarm not found' };
     }
 
-    const peerPieces = swarm.peers.get(peerId);
+    let peerPieces = swarm.peers.get(peerId);
     if (!peerPieces) {
-        return { success: false, error: 'Peer not in swarm' };
+        joinSwarm(fileId, peerId);
+        peerPieces = swarm.peers.get(peerId);
+        if (!peerPieces) {
+            return { success: false, error: 'Peer not in swarm' };
+        }
     }
 
     if (!Array.isArray(pieces)) {
@@ -277,6 +285,8 @@ function getSwarmInfo(fileId) {
 
     return {
         fileId,
+        fileName: swarm.fileName || null,
+        fileSize: swarm.fileSize || null,
         totalPieces: swarm.totalPieces,
         peerCount: swarm.peers.size,
         seedCount: peers.filter(p => p.hasAll).length,

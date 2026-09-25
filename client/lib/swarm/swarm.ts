@@ -21,12 +21,14 @@ import {
     calculatePieceCount,
     type PieceInfo,
 } from './piece';
+import { DEFAULT_ICE_SERVERS } from '../relay';
 
 export interface SwarmConfig {
     fileId: string;
     fileName: string;
     fileSize: number;
     pieceSize?: number;
+    iceServers?: RTCIceServer[];
 }
 
 export interface SwarmCallbacks {
@@ -62,12 +64,6 @@ interface PeerConnection {
     isConnected: boolean;
 }
 
-// ICE servers
-const ICE_SERVERS = [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-];
-
 export class SwarmManager {
     private config: Required<SwarmConfig>;
     private callbacks: SwarmCallbacks;
@@ -75,8 +71,8 @@ export class SwarmManager {
 
     // Swarm state
     private isSeeding: boolean;
-    private filePieces: Map<number, ArrayBuffer>; // Pieces we hold (as seeder)
-    private heldPieces: Set<number>; // Pieces we have (as leecher)
+    private filePieces: Map<number, ArrayBuffer>; // Pieces we hold (as seeder or leecher)
+    private heldPieces: Set<number>; // Pieces we have (as leecher or seeder)
     private pendingRequests: Set<number>; // Pieces being requested
 
     // Peer management
@@ -99,6 +95,7 @@ export class SwarmManager {
     ) {
         this.config = {
             pieceSize: DEFAULT_PIECE_SIZE,
+            iceServers: DEFAULT_ICE_SERVERS,
             ...config,
         };
         this.socket = socket;
@@ -110,7 +107,16 @@ export class SwarmManager {
         this.peers = new Map();
         this.peerPieceMap = new Map();
         this.pieceAvailability = new Map();
-        this.iceServers = ICE_SERVERS;
+        this.iceServers = config.iceServers && config.iceServers.length > 0 ? config.iceServers : DEFAULT_ICE_SERVERS;
+    }
+
+    /**
+     * Set or update ICE servers
+     */
+    setIceServers(servers: RTCIceServer[]): void {
+        if (servers && servers.length > 0) {
+            this.iceServers = servers;
+        }
     }
 
     /**
@@ -164,6 +170,8 @@ export class SwarmManager {
             pieces: [...this.filePieces.keys()],
         });
 
+        // Immediately update UI with our 1 seed status
+        this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
         this.callbacks.onStatus?.(`Seeding ${this.filePieces.size} pieces`);
     }
 
@@ -178,7 +186,14 @@ export class SwarmManager {
     /**
      * Handle incoming swarm info
      */
-    handleSwarmInfo(info: Swarminfo): void {
+    handleSwarmInfo(info: Swarminfo & { fileName?: string; fileSize?: number }): void {
+        if (info.fileName && (!this.config.fileName || this.config.fileName === 'downloaded-file')) {
+            this.config.fileName = info.fileName;
+        }
+        if (info.fileSize && (!this.config.fileSize || this.config.fileSize === 0)) {
+            this.config.fileSize = info.fileSize;
+        }
+
         this.callbacks.onPeersUpdate?.(info.peerCount, info.seedCount);
 
         // Update piece availability
@@ -203,10 +218,10 @@ export class SwarmManager {
      */
     handlePeerJoined(peerId: string): void {
         this.callbacks.onStatus?.(`Peer joined: ${peerId.substring(0, 8)}`);
-        this.callbacks.onPeersUpdate?.(this.peers.size + 1, this.getSeedCount());
 
         // Initiate WebRTC connection to new peer
         this.connectToPeer(peerId, true);
+        this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
     }
 
     /**
@@ -226,7 +241,7 @@ export class SwarmManager {
 
         this.peerPieceMap.delete(peerId);
         this.removePeer(peerId);
-        this.callbacks.onPeersUpdate?.(this.peers.size, this.getSeedCount());
+        this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
     }
 
     /**
@@ -248,6 +263,9 @@ export class SwarmManager {
                 this.pieceAvailability.set(piece, (this.pieceAvailability.get(piece) || 0) + 1);
             }
         }
+
+        // Update peers count and seed count
+        this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
 
         // If we're downloading and just got new pieces, request next
         if (!this.isSeeding) {
@@ -280,12 +298,16 @@ export class SwarmManager {
             return;
         }
 
-        // Find peers who have this piece
+        // Find connected peers who have this piece
         for (const [peerId, pieces] of this.peerPieceMap) {
             if (pieces.has(nextPiece) && !this.pendingRequests.has(nextPiece)) {
-                this.pendingRequests.add(nextPiece);
-                this.requestPieceFromPeer(nextPiece, peerId);
-                break;
+                const conn = this.peers.get(peerId);
+                if (conn && conn.isConnected) {
+                    this.pendingRequests.add(nextPiece);
+                    this.callbacks.onStatus?.(`Downloading piece ${nextPiece + 1}/${totalPieces}...`);
+                    this.requestPieceFromPeer(nextPiece, peerId);
+                    break;
+                }
             }
         }
     }
@@ -312,6 +334,7 @@ export class SwarmManager {
      */
     handleReceivedPiece(pieceIndex: number, data: ArrayBuffer): void {
         this.pendingRequests.delete(pieceIndex);
+        this.filePieces.set(pieceIndex, data);
         this.heldPieces.add(pieceIndex);
 
         // Update availability
@@ -323,6 +346,7 @@ export class SwarmManager {
         const totalPieces = calculatePieceCount(this.config.fileSize, this.config.pieceSize);
         const percent = Math.round((this.heldPieces.size / totalPieces) * 100);
         this.callbacks.onProgress?.(percent);
+        this.callbacks.onStatus?.(`Downloading: ${percent}% (${this.heldPieces.size}/${totalPieces} pieces)`);
 
         // Announce new piece to swarm
         this.socket.emit('announce-pieces', {
@@ -362,8 +386,29 @@ export class SwarmManager {
         const fileData = mergePieces(pieces, this.config.fileSize);
         const blob = new Blob([fileData]);
 
+        this.isSeeding = true;
         this.callbacks.onComplete?.(blob);
-        this.callbacks.onStatus?.('Download complete!');
+        this.callbacks.onStatus?.('Download complete! Seeding to swarm.');
+        this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
+    }
+
+    /**
+     * Handle incoming WebRTC signaling data for a peer
+     */
+    handleSignal(peerId: string, signal: any): void {
+        let conn = this.peers.get(peerId);
+        if (!conn) {
+            // Incoming connection from a peer - connect as non-initiator
+            this.connectToPeer(peerId, false);
+            conn = this.peers.get(peerId);
+        }
+        if (conn && conn.peer && !conn.peer.destroyed) {
+            try {
+                conn.peer.signal(signal);
+            } catch (err) {
+                console.error(`Error signaling peer ${peerId}:`, err);
+            }
+        }
     }
 
     /**
@@ -372,9 +417,16 @@ export class SwarmManager {
     private connectToPeer(peerId: string, initiator: boolean): void {
         if (this.peers.has(peerId)) return;
 
+        this.callbacks.onStatus?.(
+            initiator
+                ? `Connecting to peer ${peerId.substring(0, 8)}...`
+                : `Receiving connection from ${peerId.substring(0, 8)}...`
+        );
+
         const peer = new SimplePeer({
             initiator,
             trickle: true,
+            readableObjectMode: true,
             config: { iceServers: this.iceServers },
         });
 
@@ -389,6 +441,7 @@ export class SwarmManager {
         peer.on('connect', () => {
             const conn = this.peers.get(peerId);
             if (conn) conn.isConnected = true;
+            this.callbacks.onStatus?.(`Connected to peer ${peerId.substring(0, 8)}`);
 
             // Announce our pieces
             peer.send(JSON.stringify({
@@ -421,11 +474,19 @@ export class SwarmManager {
 
         peer.on('close', () => {
             this.removePeer(peerId);
+            if (!this.isSeeding) {
+                this.pendingRequests.clear();
+                this.requestNextPiece();
+            }
         });
 
         peer.on('error', (err) => {
             console.error(`Peer ${peerId} error:`, err);
             this.removePeer(peerId);
+            if (!this.isSeeding) {
+                this.pendingRequests.clear();
+                this.requestNextPiece();
+            }
         });
 
         this.peers.set(peerId, { peerId, peer, pieces: new Set(), isConnected: false });
@@ -459,8 +520,6 @@ export class SwarmManager {
      * Handle piece request from peer
      */
     private handlePieceRequest(peerId: string, pieceIndex: number): void {
-        if (!this.isSeeding) return;
-
         const piece = this.filePieces.get(pieceIndex);
         if (!piece) return;
 
@@ -497,6 +556,20 @@ export class SwarmManager {
     }
 
     /**
+     * Get total unique peer count including self
+     */
+    private getPeerCount(): number {
+        const uniquePeers = new Set<string>();
+        for (const peerId of this.peerPieceMap.keys()) {
+            uniquePeers.add(peerId);
+        }
+        for (const peerId of this.peers.keys()) {
+            uniquePeers.add(peerId);
+        }
+        return uniquePeers.size + 1;
+    }
+
+    /**
      * Get current seed count
      */
     private getSeedCount(): number {
@@ -505,7 +578,7 @@ export class SwarmManager {
         for (const pieces of this.peerPieceMap.values()) {
             if (pieces.size === totalPieces) seeds++;
         }
-        if (this.isSeeding) seeds++;
+        if (this.isSeeding && this.heldPieces.size === totalPieces) seeds++;
         return seeds;
     }
 
@@ -559,5 +632,26 @@ export class SwarmManager {
      */
     getHeldPiecesCount(): number {
         return this.heldPieces.size;
+    }
+
+    /**
+     * Get array of held piece indices
+     */
+    getHeldPieces(): number[] {
+        return [...this.heldPieces];
+    }
+
+    /**
+     * Get total piece count
+     */
+    getTotalPieces(): number {
+        return calculatePieceCount(this.config.fileSize, this.config.pieceSize);
+    }
+
+    /**
+     * Get current config
+     */
+    getConfig(): Required<SwarmConfig> {
+        return this.config;
     }
 }

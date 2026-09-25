@@ -1,8 +1,55 @@
-/**
- * Relay policy utilities
- */
+import { resolveSocketUrl } from './socketUrl';
 
 export const RELAY_SIZE_LIMIT = 2 * 1024 * 1024 * 1024; // 2 GB
+
+export const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:openrelay.metered.ca:80' },
+    {
+        urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
+    {
+        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject',
+        credential: 'openrelayproject',
+    },
+];
+
+let cachedIceServers: RTCIceServer[] | null = null;
+
+export async function fetchIceServers(socketUrl?: string): Promise<RTCIceServer[]> {
+    if (cachedIceServers && cachedIceServers.length > 0) {
+        return cachedIceServers;
+    }
+    try {
+        let serverUrl = socketUrl || process.env.NEXT_PUBLIC_SOCKET_URL;
+        if (!serverUrl) {
+            serverUrl = await resolveSocketUrl();
+        }
+        if (!serverUrl) {
+            serverUrl = 'http://localhost:3001';
+        }
+        const res = await fetch(`${serverUrl}/api/turn-credentials`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+            const servers = await res.json();
+            if (Array.isArray(servers) && servers.length > 0) {
+                cachedIceServers = servers;
+                return servers;
+            }
+        }
+    } catch (e) {
+        console.warn('Failed to fetch TURN credentials, using default ICE servers', e);
+    }
+    return DEFAULT_ICE_SERVERS;
+}
 
 export function filterIceServers(
     servers: RTCIceServer[],
