@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SPC_2026 - P2P File Transfer',
-  description: 'Secure peer-to-peer file transfer',
+  title: 'FileBridge — Direct P2P & Zero-Knowledge E2EE Transfer (SPC 2026)',
+  description: 'Nền tảng truyền tệp P2P ngang hàng siêu tốc và lưu trữ tạm thời Zero-Knowledge E2EE. Dự án SPC 2026.',
 };
 
 export default function RootLayout({

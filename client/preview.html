@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FileBridge — Direct P2P & Zero-Knowledge E2EE Transfer (SPC 2026)</title>
+    <meta name="description" content="FileBridge: Nền tảng truyền tệp P2P trực tiếp và lưu trữ tạm thời Zero-Knowledge E2EE. Không trung gian, không nén tệp, bảo mật tuyệt đối. Dự án tham dự SPC 2026.">
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        cyber: {
+                            50: '#ecfeff',
+                            100: '#cffafe',
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                            800: '#155e75',
+                            900: '#164e63',
+                        },
+                        darkbg: '#05070d',
+                        darkcard: '#0a0f1d',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+                    },
+                    boxShadow: {
+                        'glow': '0 0 35px -5px rgba(6, 182, 212, 0.25)',
+                        'glow-emerald': '0 0 35px -5px rgba(16, 185, 129, 0.25)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #05070d;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+
+        /* Ambient cosmic background */
+        .ambient-mesh {
+            background-color: #05070d;
+            background-image: 
+                radial-gradient(at 15% 15%, rgba(6, 182, 212, 0.12) 0px, transparent 55%),
+                radial-gradient(at 85% 20%, rgba(99, 102, 241, 0.10) 0px, transparent 50%),
+                radial-gradient(at 50% 85%, rgba(16, 185, 129, 0.08) 0px, transparent 60%);
+            background-attachment: fixed;
+        }
+
+        /* Glassmorphism utility */
+        .glass-dock {
+            background: rgba(10, 15, 29, 0.82);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7);
+        }
+
+        .glass-card {
+            background: rgba(13, 20, 38, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+
+        .glass-card:hover {
+            border-color: rgba(6, 182, 212, 0.3);
+        }
+
+        /* Tab transitions */
+        .tab-pane {
+            display: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .tab-pane.active {
+            display: block;
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* Timeline connector line */
+        .timeline-line::before {
+            content: '';
+            position: absolute;
+            top: 28px;
+            bottom: 0;
+            left: 19px;
+            width: 2px;
+            background: linear-gradient(to bottom, #06b6d4, #3b82f6, #6366f1, #1e293b);
+        }
+    </style>
+</head>
+<body class="ambient-mesh text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-32">
+
+    <!-- TOP HEADER -->
+    <header class="sticky top-0 z-40 w-full border-b border-white/[0.06] bg-[#05070d]/80 backdrop-blur-xl">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+            <!-- Brand Logo -->
+            <a href="javascript:void(0)" onclick="switchTab('transfer')" class="flex items-center gap-3 group">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 p-[1px] shadow-glow transition-transform group-hover:scale-105">
+                    <div class="w-full h-full bg-[#070b16] rounded-xl flex items-center justify-center">
+                        <!-- Bridge / Network nodes icon -->
+                        <svg class="w-5 h-5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/>
+                            <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+                            <path d="m9 11 3 3 3-3"/>
+                            <circle cx="12" cy="14" r="1"/>
+                        </svg>
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-extrabold text-xl tracking-tight text-white group-hover:text-cyan-300 transition-colors">FileBridge</span>
+                        <span class="text-[10px] font-mono font-medium px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/30" title="Dự án dự thi SPC 2026">
+                            SPC 2026 Edition
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-slate-400 hidden sm:block">Direct Peer-to-Peer & Zero-Knowledge E2EE Transfer</p>
+                </div>
+            </a>
+
+            <!-- Quick Action: Switch to Transfer Tool or Status Badge -->
+            <div class="flex items-center gap-3">
+                <button onclick="switchTab('transfer')" class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 transition-all active:scale-95">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span>Sẵn sàng truyền file</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 pt-8 pb-16">
+
+        <!-- =================================================================== -->
+        <!-- TAB 0: TRUYỀN TỆP (FILE TRANSFER - DEFAULT FIRST SCREEN) -->
+        <!-- =================================================================== -->
+        <section id="pane-transfer" class="tab-pane active space-y-8">
+            <!-- App Hero Header -->
+            <div class="text-center space-y-3">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Zero-Knowledge & P2P WebRTC Direct Data Channel
+                </div>
+                <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
+                    Chuyển Tệp Siêu Tốc & Bảo Mật Tuyệt Đối
+                </h1>
+                <p class="text-sm text-slate-400 max-w-xl mx-auto">
+                    Truyền trực tiếp giữa các trình duyệt không qua máy chủ trung gian, hoặc lưu tạm mã hóa đầu cuối với mật khẩu do bạn nắm giữ.
+                </p>
+            </div>
+
+            <!-- Transfer Mode Selector -->
+            <div class="flex justify-center">
+                <div class="inline-flex p-1.5 rounded-2xl bg-slate-900/90 border border-white/10 shadow-lg">
+                    <button id="mode-p2p" onclick="selectTransferMode('p2p')" class="mode-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow">
+                        1-to-1 Transfer (P2P)
+                    </button>
+                    <button id="mode-swarm" onclick="selectTransferMode('swarm')" class="mode-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all">
+                        Swarm Sharing (BitTorrent)
+                    </button>
+                    <button id="mode-stored" onclick="selectTransferMode('stored')" class="mode-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all">
+                        Lưu tạm E2EE (500MB)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Interactive Transfer Card -->
+            <div class="glass-card rounded-2xl p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden">
+                <!-- Dropzone -->
+                <div id="drop-zone" class="border-2 border-dashed border-cyan-500/30 hover:border-cyan-400 rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-all bg-cyan-950/5 hover:bg-cyan-950/15 group">
+                    <input type="file" id="real-file-input" multiple class="hidden" onchange="handleFilePicked(event)">
+                    <div class="flex flex-col items-center gap-3">
+                        <div class="w-14 h-14 rounded-2xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center group-hover:scale-110 transition-transform shadow-glow">
+                            <svg class="w-7 h-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                <polyline points="17 8 12 3 7 8"/>
+                                <line x1="12" y1="3" x2="12" y2="15"/>
+                            </svg>
+                        </div>
+                        <div>
+                            <p class="text-base font-bold text-white">Kéo thả tập tin vào đây hoặc <span class="text-cyan-400 underline underline-offset-2">nhấn để duyệt file</span></p>
+                            <p id="mode-desc" class="text-xs text-slate-400 mt-1">Hỗ trợ truyền đa file đồng thời. Không nén, bảo toàn 100% chất lượng gốc.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Files List (Dynamic) -->
+                <div id="file-list-box" class="hidden space-y-3">
+                    <div class="flex items-center justify-between text-xs">
+                        <span id="file-count-label" class="font-semibold text-slate-300 uppercase tracking-wider">Đã chọn 2 file (42.5 MB)</span>
+                        <button onclick="clearSelectedFiles()" class="text-rose-400 hover:underline text-xs">Xóa tất cả</button>
+                    </div>
+                    <div id="file-items-container" class="max-h-44 overflow-y-auto divide-y divide-white/5 border border-white/10 rounded-xl bg-black/40">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Stored Mode Settings (Only visible in E2EE Stored mode) -->
+                <div id="stored-settings" class="hidden space-y-4 pt-4 border-t border-white/10">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- TTL Expiry -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Thời hạn tự hủy (TTL):
+                            </label>
+                            <div class="grid grid-cols-4 gap-1.5">
+                                <button type="button" class="px-2 py-1.5 text-xs rounded-lg border border-white/10 bg-black/30 hover:border-cyan-500 text-slate-300 focus:bg-cyan-500 focus:text-white">1h</button>
+                                <button type="button" class="px-2 py-1.5 text-xs rounded-lg border border-white/10 bg-black/30 hover:border-cyan-500 text-slate-300 focus:bg-cyan-500 focus:text-white">6h</button>
+                                <button type="button" class="px-2 py-1.5 text-xs rounded-lg border border-white/10 bg-black/30 hover:border-cyan-500 text-slate-300 focus:bg-cyan-500 focus:text-white">12h</button>
+                                <button type="button" class="px-2 py-1.5 text-xs rounded-lg border border-cyan-500 bg-cyan-500 text-white font-bold">24h</button>
+                            </div>
+                        </div>
+
+                        <!-- Burn After Reading -->
+                        <div class="space-y-2">
+                            <label class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>
+                                Chế độ Tự hủy:
+                            </label>
+                            <label class="flex items-center gap-2 p-2 rounded-xl border border-white/10 bg-black/30 cursor-pointer">
+                                <input type="checkbox" checked class="w-4 h-4 rounded text-cyan-500">
+                                <span class="text-xs text-slate-300">Tự xóa ngay sau 1 lần tải (Burn after reading)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- E2EE Password Box -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between text-xs">
+                            <label class="font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                                <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                Mật khẩu mã hóa AES-256 (Mật khẩu do bạn nắm):
+                            </label>
+                            <button type="button" onclick="generateNewPassword()" class="text-cyan-400 hover:underline flex items-center gap-1">
+                                <span>Tạo mật khẩu mới</span>
+                            </button>
+                        </div>
+                        <input type="text" id="e2ee-pass-input" value="fb-9Xk7mP2qW8vR" class="w-full px-3 py-2 text-xs font-mono rounded-xl bg-black/50 border border-white/10 text-cyan-300 focus:outline-none focus:border-cyan-400">
+                    </div>
+                </div>
+
+                <!-- Action Button -->
+                <button onclick="handleStartAction()" class="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 shadow-glow flex items-center justify-center gap-2 transition-all active:scale-[0.99]">
+                    <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                    <span id="action-btn-text">Bắt đầu truyền tệp P2P</span>
+                </button>
+
+                <!-- Information Badges -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-white/5 text-xs text-slate-400">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                        <span>Không cần tài khoản hay đăng nhập</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        <span>Mã hóa WebCrypto đầu cuối</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                        <span>Tốc độ tối đa đường truyền mạng</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 1: VỀ CHÚNG TÔI (ABOUT US) -->
+        <!-- =================================================================== -->
+        <section id="pane-about" class="tab-pane space-y-12">
+            <!-- Hero Title -->
+            <div class="space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
+                    Sứ mệnh bảo vệ dữ liệu & quyền tự do số
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Về FileBridge
+                </h1>
+                <p class="text-lg text-cyan-300/90 font-medium">
+                    Tại sao chúng tôi xây dựng nền tảng này?
+                </p>
+            </div>
+
+            <!-- Narrative Paragraphs -->
+            <div class="space-y-6 text-slate-300 text-base leading-relaxed">
+                <p>
+                    Chúng tôi tạo ra <strong>FileBridge</strong> (dự án phát triển tranh tài tại cuộc thi <em>SPC 2026</em>) bắt đầu từ một nỗi trăn trở có thật mà bất kỳ ai làm việc với dữ liệu số đều từng trải qua: khi bạn cần gửi một thước phim 4K sắc nét, một bản vẽ kiến trúc 3D hay tài liệu nội bộ qua các ứng dụng chat hoặc đám mây phổ biến, thuật toán của họ âm thầm <em>nén nát tập tin</em> của bạn nhằm tiết kiệm chi phí băng thông máy chủ cho chính họ.
+                </p>
+                <p>
+                    Kết quả là tệp tin bị giảm chất lượng, hình ảnh nhòe mờ. Nhưng điều đáng lo ngại hơn là: <strong>sự riêng tư của bạn bị tước đoạt</strong>.
+                </p>
+
+                <!-- Callout Quote Card -->
+                <div class="glass-card p-6 sm:p-8 rounded-2xl border-l-4 border-l-cyan-400 my-8 shadow-glow">
+                    <h3 class="text-lg font-bold text-white mb-2">Kỷ nguyên "Khai thác dữ liệu người dùng"</h3>
+                    <p class="text-slate-300 text-sm leading-relaxed mb-4">
+                        Ngày nay, các tập đoàn Big Tech mặc định coi dữ liệu tải lên máy chủ của họ là nguồn tài nguyên miễn phí. Hợp đồng kinh doanh, bản nháp sáng tạo chưa công bố, hay hình ảnh gia đình riêng tư đều có nguy cơ bị quét tự động, phân tích hành vi và trở thành nguyên liệu huấn luyện cho các mô hình AI của họ.
+                    </p>
+                    <blockquote class="italic text-cyan-300 text-base font-medium">
+                        "Sự riêng tư không phải là một đặc quyền xa xỉ. Đó là quyền cơ bản của mỗi con người trong kỷ nguyên số."
+                    </blockquote>
+                </div>
+
+                <h2 class="text-2xl font-bold text-white pt-4">Lời đáp trả từ FileBridge</h2>
+                <p>
+                    Chúng tôi tin rằng: <strong>Dữ liệu của bạn là của riêng bạn</strong>. Tập tin bạn tạo ra thuộc về bạn, không phải của bất kỳ thuật toán quét dữ liệu nào.
+                </p>
+                <p>
+                    FileBridge không phải là một mạng xã hội, cũng không phải một dịch vụ lưu trữ đám mây tò mò thu thập dữ liệu cá nhân. Chúng tôi cung cấp giải pháp <strong>vận chuyển dữ liệu trực tiếp ngang hàng (P2P)</strong> và <strong>lưu tạm mã hóa Zero-Knowledge</strong> với tốc độ tối đa của đường truyền mạng.
+                </p>
+            </div>
+
+            <!-- The 3 Pillars (Triết lý 3P) -->
+            <div class="space-y-4 pt-4">
+                <h3 class="text-xs uppercase tracking-widest font-mono text-cyan-400 font-semibold">Triết lý thiết kế cốt lõi</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="glass-card p-6 rounded-2xl space-y-3">
+                        <div class="w-10 h-10 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center font-bold font-mono">
+                            01
+                        </div>
+                        <h4 class="text-base font-bold text-white">Peer-to-Peer (P2P)</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Truyền trực tiếp từ trình duyệt sang trình duyệt qua WebRTC. Không máy chủ trung gian xem trộm, không giới hạn dung lượng lý thuyết.
+                        </p>
+                    </div>
+
+                    <div class="glass-card p-6 rounded-2xl space-y-3">
+                        <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center font-bold font-mono">
+                            02
+                        </div>
+                        <h4 class="text-base font-bold text-white">Pure Quality (100%)</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Bảo toàn nguyên vẹn 100% dung lượng và chất lượng file bit-for-bit. Bạn gửi 5GB, người nhận nhận đúng 5GB không sai một byte.
+                        </p>
+                    </div>
+
+                    <div class="glass-card p-6 rounded-2xl space-y-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold font-mono">
+                            03
+                        </div>
+                        <h4 class="text-base font-bold text-white">Privacy by Math</h4>
+                        <p class="text-xs text-slate-400 leading-relaxed">
+                            Không bắt buộc đăng ký tài khoản, không thu thập email hay số điện thoại. Bảo mật bằng mật mã học AES-256-GCM và WebCrypto.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 2: BẢO MẬT (SECURITY) -->
+        <!-- =================================================================== -->
+        <section id="pane-security" class="tab-pane space-y-12">
+            <div class="space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                    Kiến trúc mật mã bảo vệ tuyệt đối
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Zero-Knowledge by Design
+                </h1>
+                <p class="text-lg text-slate-300 font-medium">
+                    Tại FileBridge, "Bảo mật" không phải là một tính năng gắn thêm. Nó là nền móng cốt lõi toán học của toàn bộ hệ thống.
+                </p>
+            </div>
+
+            <!-- Deep explanation -->
+            <div class="space-y-6 text-slate-300 text-base leading-relaxed">
+                <p>
+                    Chúng tôi áp dụng triết lý <strong>Zero-Knowledge (Không lưu trữ và không thể xem thông tin)</strong>. Nghĩa là về mặt toán học và hạ tầng kỹ thuật, máy chủ của FileBridge hoàn toàn "mù tịt" trước nội dung bạn đang truyền tải.
+                </p>
+
+                <h2 class="text-2xl font-bold text-white pt-2">Ba Tầng Bảo Vệ Toàn Diện</h2>
+
+                <!-- Layer 1: Direct WebRTC -->
+                <div class="glass-card p-6 sm:p-7 rounded-2xl space-y-4 border-l-4 border-l-cyan-400">
+                    <div class="flex items-center gap-3">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-500/20 text-cyan-300">TẦNG 1</span>
+                        <h3 class="text-lg font-bold text-white">Truyền trực tiếp Peer-to-Peer (WebRTC DataChannel)</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        Khi 2 máy tính kết nối với nhau, máy chủ chỉ làm nhiệm vụ kết nối ban đầu (Signaling SDP/ICE). Sau khi kênh dữ liệu mở thành công, dữ liệu tập tin bay trực tiếp giữa 2 thiết bị qua đường hầm mã hóa <strong>DTLS 1.3 / SRTP</strong>. Máy chủ không hề lưu lại hoặc đọc bất kỳ byte dữ liệu nào của file.
+                    </p>
+                </div>
+
+                <!-- Layer 2: Swarm Sharing -->
+                <div class="glass-card p-6 sm:p-7 rounded-2xl space-y-4 border-l-4 border-l-blue-400">
+                    <div class="flex items-center gap-3">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-blue-500/20 text-blue-300">TẦNG 2</span>
+                        <h3 class="text-lg font-bold text-white">Mạng lưới Swarm Sharing & Băm toàn vẹn (BitTorrent Web)</h3>
+                    </div>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        Tệp tin được chia nhỏ thành các mảnh (pieces) từ 256KB đến 1MB. Mỗi mảnh được gán mã băm toàn vẹn SHA-256 để đảm bảo không một nút trung gian nào có thể can thiệp hoặc sửa đổi dữ liệu trong quá trình chia sẻ giữa các peer.
+                    </p>
+                </div>
+
+                <!-- Layer 3: Zero-Knowledge Temporary Storage -->
+                <div class="glass-card p-6 sm:p-7 rounded-2xl space-y-4 border-l-4 border-l-emerald-400">
+                    <div class="flex items-center gap-3">
+                        <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300">TẦNG 3</span>
+                        <h3 class="text-lg font-bold text-white">Lưu tạm E2EE (Client-Side Encryption) & Tự hủy (Burn)</h3>
+                    </div>
+                    <div class="text-sm text-slate-300 space-y-3 leading-relaxed">
+                        <p>
+                            Khi người nhận chưa online, bạn có thể chọn chế độ <strong>Lưu tạm E2EE</strong>:
+                        </p>
+                        <ul class="list-disc list-inside space-y-2 text-slate-300 pl-2">
+                            <li><strong class="text-white">Mã hóa ngay trên RAM máy bạn:</strong> Trình duyệt sử dụng hàm <code>PBKDF2</code> (100,000 vòng lặp) và thuật toán <code>AES-256-GCM</code> thông qua chuẩn Web Crypto API. File biến thành bản mã vô nghĩa (.enc) trước khi gửi lên server.</li>
+                            <li><strong class="text-white">Đường link chứa Chìa khóa (#hash):</strong> Mật khẩu giải mã được đặt ở phần URL hash (sau dấu <code>#</code>). Theo chuẩn RFC 3986, trình duyệt <em>không bao giờ gửi nội dung sau dấu # lên máy chủ</em>. Do đó máy chủ không có chìa khóa để mở file.</li>
+                            <li><strong class="text-white">Cơ chế Tự hủy (Burn After Reading & TTL):</strong> File sẽ tự động bị xóa sạch khỏi máy chủ sau khi hết hạn (1h, 6h, 12h, 24h) hoặc xóa ngay lập tức sau 1 lần tải thành công duy nhất.</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Transparency Table -->
+                <div class="pt-6">
+                    <h3 class="text-xl font-bold text-white mb-4">Minh bạch: Chúng tôi biết gì và không biết gì?</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="glass-card p-6 rounded-2xl border-emerald-500/20 bg-emerald-950/10">
+                            <div class="text-xs uppercase tracking-wider font-mono font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
+                                <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg>
+                                NHỮNG GÌ MÁY CHỦ BIẾT
+                            </div>
+                            <ul class="text-xs text-slate-300 space-y-2 leading-relaxed">
+                                <li>• Dung lượng bản mã ước tính (để kiểm tra giới hạn 500MB).</li>
+                                <li>• Thời điểm tệp tải lên và thời hạn tự hủy (để chạy sweeper xóa file).</li>
+                                <li>• Số lượt tải (để kích hoạt tự hủy sau 1 lần tải).</li>
+                            </ul>
+                        </div>
+
+                        <div class="glass-card p-6 rounded-2xl border-cyan-500/20 bg-cyan-950/10">
+                            <div class="text-xs uppercase tracking-wider font-mono font-bold text-cyan-400 mb-2 flex items-center gap-1.5">
+                                <svg class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                                NHỮNG GÌ MÁY CHỦ KHÔNG THỂ BIẾT
+                            </div>
+                            <ul class="text-xs text-slate-300 space-y-2 leading-relaxed">
+                                <li>• Mật khẩu giải mã và chìa khóa bảo mật.</li>
+                                <li>• Tên tập tin gốc, nội dung bên trong file (ảnh, video, văn bản hay mã nguồn).</li>
+                                <li>• Danh tính người gửi và người nhận (không cần tài khoản).</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 3: CHÍNH SÁCH (PRIVACY & TERMS) -->
+        <!-- =================================================================== -->
+        <section id="pane-privacy" class="tab-pane space-y-12">
+            <div class="space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
+                    <svg class="w-3.5 h-3.5 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    Minh bạch pháp lý bằng ngôn ngữ rõ ràng
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Chính Sách & Quyền Riêng Tư
+                </h1>
+                <p class="text-lg text-slate-300 font-medium">
+                    Chúng tôi tin rằng các điều khoản nên được viết bằng ngôn ngữ con người có thể hiểu được, không phải những trang bẫy từ ngữ pháp lý mơ hồ.
+                </p>
+            </div>
+
+            <div class="space-y-8 text-slate-300 text-sm leading-relaxed">
+                <!-- Section 1 -->
+                <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-4">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 inline-flex items-center justify-center text-xs font-mono font-bold">1</span>
+                        Chính sách Quyền riêng tư (Privacy Policy)
+                    </h3>
+                    <p>
+                        <strong>Triết lý thu thập tối thiểu (Data Minimization):</strong> Do kiến trúc truyền tệp P2P và Mã hóa đầu cuối E2EE, chúng tôi không có khả năng kỹ thuật để giải mã, xem hay biết nội dung các tệp bạn gửi.
+                    </p>
+                    <div class="bg-black/30 p-4 rounded-xl space-y-2 border border-white/5">
+                        <div class="text-emerald-400 font-semibold text-xs uppercase tracking-wider flex items-center gap-1.5">
+                            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                            CAM KẾT TUYỆT ĐỐI KHÔNG ĐÀO TẠO AI (NO-AI-TRAINING)
+                        </div>
+                        <p class="text-xs text-slate-300">
+                            Chúng tôi cam kết <strong>KHÔNG BAO GIỜ</strong> bán dữ liệu, và <strong>KHÔNG BAO GIỜ</strong> sử dụng tệp tin của người dùng để huấn luyện cho bất kỳ mô hình Trí tuệ Nhân tạo (AI) nào, dù là nội bộ hay của bên thứ ba.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Section 2 -->
+                <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-4">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-blue-500/20 text-blue-400 inline-flex items-center justify-center text-xs font-mono font-bold">2</span>
+                        Điều khoản Sử dụng có trách nhiệm (Acceptable Use)
+                    </h3>
+                    <p>
+                        FileBridge được tạo ra nhằm phục vụ việc chuyển dữ liệu hợp pháp và an toàn giữa các cá nhân, tổ chức. Khi sử dụng nền tảng, bạn đồng ý không tải lên hoặc phát tán:
+                    </p>
+                    <ol class="list-decimal list-inside space-y-1.5 pl-2 text-slate-300">
+                        <li>Mã độc, phần mềm gián điệp, virus hoặc ransomware.</li>
+                        <li>Tài liệu xâm hại hoặc lạm dụng trẻ em (CSAM).</li>
+                        <li>Nội dung vi phạm nghiêm trọng bản quyền sở hữu trí tuệ.</li>
+                        <li>Dữ liệu đánh cắp từ tài khoản ngân hàng hoặc phục vụ hành vi lừa đảo (Phishing).</li>
+                    </ol>
+                    <p class="text-xs text-slate-400">
+                        Mặc dù chúng tôi không xem được nội dung tệp, nếu một liên kết bị cộng đồng báo cáo lạm dụng công khai, chúng tôi có quyền vô hiệu hóa và xóa gói dữ liệu mã hóa đó ngay lập tức.
+                    </p>
+                </div>
+
+                <!-- Section 3 -->
+                <div class="glass-card p-6 sm:p-8 rounded-2xl space-y-4">
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span class="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 inline-flex items-center justify-center text-xs font-mono font-bold">3</span>
+                        Miễn trừ Trách nhiệm & Trách nhiệm sao lưu
+                    </h3>
+                    <p>
+                        Nền tảng được cung cấp theo nguyên tắc <strong>"nguyên trạng" (as-is)</strong>. Vì toàn bộ khóa mã hóa nằm trong tay bạn, nếu bạn làm mất đường link chứa mật khẩu, <strong>không ai (kể cả đội ngũ FileBridge) có thể giải mã hay khôi phục lại dữ liệu cho bạn</strong>. Người dùng có trách nhiệm lưu trữ an toàn các bản sao của dữ liệu quan trọng.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 4: FAQ (CÂU HỎI THƯỜNG GẶP) -->
+        <!-- =================================================================== -->
+        <section id="pane-faq" class="tab-pane space-y-12">
+            <div class="space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    Giải đáp minh bạch mọi thắc mắc
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Câu Hỏi Thường Gặp (FAQ)
+                </h1>
+                <p class="text-lg text-slate-300 font-medium">
+                    Mọi thắc mắc của bạn về cách FileBridge hoạt động, giới hạn dung lượng và tính an toàn.
+                </p>
+            </div>
+
+            <!-- FAQ List -->
+            <div class="space-y-4">
+                <!-- Q1 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">01.</span>
+                        Kích thước tệp tối đa tôi có thể gửi là bao nhiêu?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        - <strong>Chế độ 1-to-1 P2P & Swarm Sharing:</strong> Không giới hạn dung lượng từ máy chủ, vì file được truyền trực tiếp từ máy bạn sang máy người nhận qua WebRTC DataChannel. Bạn có thể gửi file 10GB, 30GB hay 50GB tùy vào cấu hình RAM và mạng.<br>
+                        - <strong>Chế độ Lưu tạm E2EE:</strong> Giới hạn tối đa <strong>500 MB</strong> cho mỗi gói file (hỗ trợ đóng gói nhiều file thành một) để máy chủ phục vụ lưu trữ đệm cho cộng đồng.
+                    </p>
+                </div>
+
+                <!-- Q2 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">02.</span>
+                        Tập tin của tôi có bị nén hay suy hao chất lượng không?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        Tuyệt đối không! FileBridge bảo toàn 100% dữ liệu gốc bit-by-bit. File ảnh RAW, video 4K ProRes hay tập tin nén ZIP được giữ nguyên dung lượng, chất lượng và siêu dữ liệu không suy giảm một byte nào.
+                    </p>
+                </div>
+
+                <!-- Q3 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">03.</span>
+                        Tôi có cần phải đăng ký tài khoản hay đăng nhập không?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        Hoàn toàn <strong>KHÔNG</strong>. FileBridge được thiết kế tôn trọng sự tự do và tính ẩn danh. Bạn không cần đăng ký tài khoản, không cần nhập email hay số điện thoại. Chỉ cần mở trình duyệt web lên và thực hiện chia sẻ ngay lập tức.
+                    </p>
+                </div>
+
+                <!-- Q4 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">04.</span>
+                        Chế độ Swarm Sharing hoạt động như thế nào?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        Swarm Sharing hoạt động tương tự nguyên lý của mạng lưới BitTorrent: khi một file được chia sẻ cho nhiều người nhận, những người đã nhận được một phần dữ liệu sẽ đồng thời hỗ trợ gửi mảnh dữ liệu đó cho những người khác trong mạng lưới. Càng nhiều người cùng tải thì tốc độ truyền càng nhanh và giảm tải tối đa cho máy người gửi ban đầu.
+                    </p>
+                </div>
+
+                <!-- Q5 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">05.</span>
+                        Nếu tôi làm mất đường link chứa mật khẩu, tôi có lấy lại được file không?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        Không thể. Do chúng tôi áp dụng mã hóa Zero-Knowledge, mật khẩu chỉ nằm trên đường link hoặc do bạn giữ, server không hề biết mật khẩu. Nếu làm mất link chứa mật khẩu, dữ liệu sẽ vĩnh viễn không thể giải mã.
+                    </p>
+                </div>
+
+                <!-- Q6 -->
+                <div class="glass-card p-6 rounded-2xl space-y-2">
+                    <h3 class="text-base font-bold text-white flex items-center gap-2">
+                        <span class="text-cyan-400 font-mono">06.</span>
+                        Tính năng "Tự hủy sau 1 lần tải" (Burn After Reading) là gì?
+                    </h3>
+                    <p class="text-sm text-slate-300 leading-relaxed pl-7">
+                        Khi người gửi kích hoạt tùy chọn này trong tab Lưu tạm E2EE, ngay sau khi người nhận tải xong toàn bộ tập tin lần đầu tiên, máy chủ sẽ lập tức hủy bỏ và xóa vĩnh viễn bản mã khỏi đĩa cứng. Không ai có thể tải lại file này lần thứ hai.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- =================================================================== -->
+        <!-- TAB 5: LỘ TRÌNH (ROADMAP) -->
+        <!-- =================================================================== -->
+        <section id="pane-roadmap" class="tab-pane space-y-12">
+            <div class="space-y-4">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    <svg class="w-3.5 h-3.5 text-purple-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Xây dựng minh bạch cùng cộng đồng (Build in Public)
+                </div>
+                <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight text-white leading-tight">
+                    Lộ Trình Phát Triển
+                </h1>
+                <p class="text-lg text-slate-300 font-medium">
+                    Hành trình phát triển kiến trúc chia sẻ tệp thế hệ mới của FileBridge (SPC 2026 Edition).
+                </p>
+            </div>
+
+            <!-- Timeline -->
+            <div class="relative pl-6 sm:pl-10 space-y-10 timeline-line">
+                <!-- Stage 1: Active -->
+                <div class="relative space-y-3">
+                    <div class="absolute -left-[35px] sm:-left-[51px] top-1.5 w-6 h-6 rounded-full bg-cyan-500 border-4 border-[#05070d] flex items-center justify-center shadow-glow">
+                        <div class="w-2 h-2 rounded-full bg-white animate-ping"></div>
+                    </div>
+                    <div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            HIỆN TẠI — ĐÃ HOÀN THÀNH
+                        </span>
+                        <h3 class="text-xl font-bold text-white mt-1">Giai đoạn 1: Nền tảng cốt lõi (The MVP)</h3>
+                    </div>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Tập trung tối đa vào độ ổn định kết nối, truyền tải dữ liệu nguyên bản và kiến trúc Zero-Knowledge.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 glass-card p-4 rounded-xl">
+                        <li class="flex items-center gap-2 text-cyan-300">
+                            <svg class="w-4 h-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Giao diện kéo thả hiện đại, không cần đăng nhập hay cấu hình phức tạp.
+                        </li>
+                        <li class="flex items-center gap-2 text-cyan-300">
+                            <svg class="w-4 h-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Truyền trực tiếp 1-1 qua WebRTC DataChannel (kèm STUN/TURN fallback).
+                        </li>
+                        <li class="flex items-center gap-2 text-cyan-300">
+                            <svg class="w-4 h-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Mạng lưới Swarm Sharing chia sẻ đa điểm theo mảnh băm 256KB-1MB.
+                        </li>
+                        <li class="flex items-center gap-2 text-cyan-300">
+                            <svg class="w-4 h-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                            Lưu tạm E2EE Zero-Knowledge (AES-256-GCM) kèm TTL và tự hủy sau 1 lần tải (Burn).
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Stage 2 -->
+                <div class="relative space-y-3">
+                    <div class="absolute -left-[35px] sm:-left-[51px] top-1.5 w-6 h-6 rounded-full bg-blue-500 border-4 border-[#05070d]"></div>
+                    <div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            KẾ HOẠCH — QUÝ TIẾP THEO
+                        </span>
+                        <h3 class="text-xl font-bold text-white mt-1">Giai đoạn 2: Tự động phục hồi & Chia sẻ Thư mục</h3>
+                    </div>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Nâng cao độ bền bỉ khi truyền các tệp tin khổng lồ qua đường truyền mạng chập chờn.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 glass-card p-4 rounded-xl">
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                            Resumable Transfer: Tiếp tục tải tự động khi mạng mất kết nối mà không phải truyền lại từ đầu.
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                            Folder Tree Drag-and-Drop: Kéo thả nguyên thư mục giữ trọn cấu trúc cây thư mục con.
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+                            Local LAN Discovery: Tự nhận diện các thiết bị cùng mạng Wi-Fi/LAN để truyền tốc độ cao không tốn băng thông internet.
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Stage 3 -->
+                <div class="relative space-y-3">
+                    <div class="absolute -left-[35px] sm:-left-[51px] top-1.5 w-6 h-6 rounded-full bg-indigo-500 border-4 border-[#05070d]"></div>
+                    <div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                            NĂM 2027
+                        </span>
+                        <h3 class="text-xl font-bold text-white mt-1">Giai đoạn 3: Đa nền tảng & Ứng dụng Chuyên dụng</h3>
+                    </div>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Mở rộng khả năng tích hợp cho lập trình viên và người dùng chuyên nghiệp.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 glass-card p-4 rounded-xl">
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                            Phát hành ứng dụng PWA Desktop (Windows, macOS, Linux) hoạt động ngoại tuyến.
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                            Công cụ dòng lệnh FileBridge CLI cho Developer truyền tệp trực tiếp từ terminal.
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+                            Tích hợp xác thực mã băm SHA-256 đối chiếu 2 đầu độc lập.
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Stage 4 -->
+                <div class="relative space-y-3">
+                    <div class="absolute -left-[35px] sm:-left-[51px] top-1.5 w-6 h-6 rounded-full bg-slate-700 border-4 border-[#05070d]"></div>
+                    <div>
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                            TẦM NHÌN DÀI HẠN
+                        </span>
+                        <h3 class="text-xl font-bold text-white mt-1">Giai đoạn 4: Hệ sinh thái Phi tập trung & Self-Hosted</h3>
+                    </div>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Gói triển khai độc lập (Docker image) cho các doanh nghiệp, tổ chức yêu cầu hạ tầng nội bộ tuyệt mật.
+                    </p>
+                    <ul class="text-xs text-slate-300 space-y-2 glass-card p-4 rounded-xl">
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                            Bản cài đặt 1-Click Docker cho doanh nghiệp tự vận hành hệ thống riêng.
+                        </li>
+                        <li class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                            Cầu nối kết nối mạng lưu trữ phi tập trung (IPFS / WebTorrent).
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FLOATING DOCK BOTTOM NAVIGATION (WITH TRUYỀN TỆP AS FIRST TAB) -->
+    <nav class="fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl">
+        <div class="glass-dock rounded-full px-2 py-1.5 sm:px-3 sm:py-2 flex items-center justify-between shadow-2xl">
+            <!-- Navigation Links -->
+            <div class="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+                <!-- Tab Truyền tệp (Active by default) -->
+                <button onclick="switchTab('transfer')" id="btn-transfer" class="tab-btn px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 shadow-glow whitespace-nowrap flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 17-4 4-4-4"/></svg>
+                    Truyền tệp
+                </button>
+                <button onclick="switchTab('about')" id="btn-about" class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
+                    Về chúng tôi
+                </button>
+                <button onclick="switchTab('security')" id="btn-security" class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
+                    Bảo mật
+                </button>
+                <button onclick="switchTab('privacy')" id="btn-privacy" class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
+                    Chính sách
+                </button>
+                <button onclick="switchTab('faq')" id="btn-faq" class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
+                    FAQ
+                </button>
+                <button onclick="switchTab('roadmap')" id="btn-roadmap" class="tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap">
+                    Lộ trình
+                </button>
+            </div>
+
+            <!-- Right Controls: Language & Quick Launch -->
+            <div class="flex items-center gap-2 pl-2 border-l border-white/10 shrink-0">
+                <!-- Language Toggle -->
+                <button onclick="toggleLanguage()" id="lang-btn" class="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs text-slate-300 hover:text-white hover:bg-white/5 transition-colors" title="Chuyển ngôn ngữ">
+                    <span class="text-sm">🇻🇳</span>
+                    <span id="lang-text" class="text-[11px] font-mono font-medium hidden sm:inline">VIE</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- JAVASCRIPT FOR TAB SWITCHING & TRANSFER INTERACTIONS -->
+    <script>
+        const tabs = ['transfer', 'about', 'security', 'privacy', 'faq', 'roadmap'];
+
+        function switchTab(tabId) {
+            // Update URL hash without jumping
+            history.replaceState(null, '', '#' + tabId);
+
+            // Switch panes
+            tabs.forEach(t => {
+                const pane = document.getElementById('pane-' + t);
+                const btn = document.getElementById('btn-' + t);
+                if (!pane || !btn) return;
+
+                if (t === tabId) {
+                    pane.classList.add('active');
+                    btn.className = 'tab-btn px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200 text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 shadow-glow whitespace-nowrap flex items-center gap-1.5';
+                } else {
+                    pane.classList.remove('active');
+                    btn.className = 'tab-btn px-3 py-1.5 rounded-full text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-all duration-200 whitespace-nowrap flex items-center gap-1.5';
+                }
+            });
+
+            // Smooth scroll to top of main content
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // On initial page load: default to 'transfer' unless explicit hash is given
+        window.addEventListener('DOMContentLoaded', () => {
+            const hash = window.location.hash.replace('#', '');
+            if (tabs.includes(hash)) {
+                switchTab(hash);
+            } else {
+                switchTab('transfer');
+            }
+        });
+
+        // Mode Selection in Transfer Tab
+        let currentMode = 'p2p';
+        function selectTransferMode(mode) {
+            currentMode = mode;
+            const modes = ['p2p', 'swarm', 'stored'];
+            modes.forEach(m => {
+                const btn = document.getElementById('mode-' + m);
+                if (m === mode) {
+                    btn.className = 'mode-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-glow';
+                } else {
+                    btn.className = 'mode-btn px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-400 hover:text-white transition-all';
+                }
+            });
+
+            const storedSettings = document.getElementById('stored-settings');
+            const modeDesc = document.getElementById('mode-desc');
+            const actionBtnText = document.getElementById('action-btn-text');
+
+            if (mode === 'stored') {
+                storedSettings.classList.remove('hidden');
+                modeDesc.innerText = 'Lưu tạm file trên server (Tối đa 500MB) với mã hóa Zero-Knowledge AES-256-GCM.';
+                actionBtnText.innerText = 'Mã hóa & Lưu tạm lên Server (E2EE)';
+            } else if (mode === 'swarm') {
+                storedSettings.classList.add('hidden');
+                modeDesc.innerText = 'Chia sẻ tệp đa điểm (BitTorrent trên web), càng nhiều người cùng tải thì tốc độ càng nhanh.';
+                actionBtnText.innerText = 'Khởi tạo phòng Swarm Sharing';
+            } else {
+                storedSettings.classList.add('hidden');
+                modeDesc.innerText = 'Truyền trực tiếp giữa 2 thiết bị qua WebRTC DataChannel (kèm STUN/TURN fallback).';
+                actionBtnText.innerText = 'Bắt đầu truyền tệp P2P (1-to-1)';
+            }
+        }
+
+        // File dropzone clicks
+        document.getElementById('drop-zone').addEventListener('click', () => {
+            document.getElementById('real-file-input').click();
+        });
+
+        let selectedFilesList = [];
+        function handleFilePicked(e) {
+            if (e.target.files && e.target.files.length > 0) {
+                selectedFilesList = Array.from(e.target.files);
+                renderFileList();
+            }
+        }
+
+        function renderFileList() {
+            const box = document.getElementById('file-list-box');
+            const container = document.getElementById('file-items-container');
+            const label = document.getElementById('file-count-label');
+
+            if (selectedFilesList.length === 0) {
+                box.classList.add('hidden');
+                return;
+            }
+
+            box.classList.remove('hidden');
+            let totalBytes = selectedFilesList.reduce((acc, f) => acc + f.size, 0);
+            label.innerText = `Đã chọn ${selectedFilesList.length} file (${formatBytes(totalBytes)})`;
+
+            container.innerHTML = selectedFilesList.map((f, i) => `
+                <div class="flex items-center justify-between p-2.5 text-xs">
+                    <div class="flex items-center gap-2 min-w-0 pr-2">
+                        <svg class="w-4 h-4 text-cyan-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span class="font-medium text-white truncate">${f.name}</span>
+                        <span class="text-slate-400 shrink-0">(${formatBytes(f.size)})</span>
+                    </div>
+                    <button onclick="removeFile(${i})" class="text-slate-400 hover:text-rose-400 p-1">
+                        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function removeFile(idx) {
+            selectedFilesList.splice(idx, 1);
+            renderFileList();
+        }
+
+        function clearSelectedFiles() {
+            selectedFilesList = [];
+            renderFileList();
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function generateNewPassword() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789';
+            let pass = 'fb-';
+            for (let i = 0; i < 12; i++) {
+                pass += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            document.getElementById('e2ee-pass-input').value = pass;
+        }
+
+        function handleStartAction() {
+            // If running on actual port 3000, redirect to real Next.js client
+            if (window.location.port === '3000') {
+                window.location.href = '/?mode=' + currentMode;
+            } else {
+                alert(`[FileBridge] Đang khởi động chế độ: ${currentMode.toUpperCase()}!\nĐể truyền dữ liệu thời gian thực qua WebRTC, vui lòng chạy 'npm run dev' trong thư mục client.`);
+            }
+        }
+
+        // Language toggle
+        let currentLang = 'vi';
+        function toggleLanguage() {
+            if (currentLang === 'vi') {
+                currentLang = 'en';
+                document.getElementById('lang-btn').innerHTML = '<span class="text-sm">🇬🇧</span> <span id="lang-text" class="text-[11px] font-mono font-medium hidden sm:inline">ENG</span>';
+            } else {
+                currentLang = 'vi';
+                document.getElementById('lang-btn').innerHTML = '<span class="text-sm">🇻🇳</span> <span id="lang-text" class="text-[11px] font-mono font-medium hidden sm:inline">VIE</span>';
+            }
+        }
+    </script>
+</body>
+</html>
