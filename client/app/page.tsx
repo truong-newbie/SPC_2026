@@ -28,13 +28,27 @@ const SwarmTransfer = dynamic(() => import('@/components/SwarmTransfer'), {
     ),
 });
 
+const StoredTransfer = dynamic(() => import('@/components/StoredTransfer'), {
+    ssr: false,
+    loading: () => (
+        <div className="flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+                <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-muted-foreground">Loading...</p>
+            </div>
+        </div>
+    ),
+});
+
 export default function Home() {
-    const [mode, setMode] = useState<'p2p' | 'swarm'>('p2p');
+    const [mode, setMode] = useState<'p2p' | 'swarm' | 'stored'>('p2p');
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
-            if (params.get('swarm')) {
+            if (params.get('stored')) {
+                setMode('stored');
+            } else if (params.get('swarm')) {
                 setMode('swarm');
             }
         }
@@ -65,11 +79,27 @@ export default function Home() {
                     >
                         Swarm Sharing
                     </button>
+                    <button
+                        onClick={() => setMode('stored')}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                            mode === 'stored'
+                                ? 'bg-primary text-primary-foreground'
+                                : 'hover:bg-muted'
+                        }`}
+                    >
+                        Lưu tạm E2EE
+                    </button>
                 </div>
             </div>
 
             {/* Transfer Component */}
-            {mode === 'p2p' ? <P2PTransfer /> : <SwarmTransfer />}
+            {mode === 'p2p' ? (
+                <P2PTransfer />
+            ) : mode === 'swarm' ? (
+                <SwarmTransfer />
+            ) : (
+                <StoredTransfer />
+            )}
         </div>
     );
 }

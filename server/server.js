@@ -15,6 +15,9 @@ const cors = require('cors');
 const helmet = require('helmet');
 const crypto = require('crypto');
 
+const fs = require('fs');
+const tempStorage = require('./tempStorage');
+
 // Swarm Tracker
 const swarm = require('./swarm');
 
@@ -55,6 +58,7 @@ app.use(cors({
         return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
+    exposedHeaders: ['x-file-name', 'x-file-size', 'x-salt', 'x-iv', 'x-burn-after-reading', 'Content-Disposition'],
 }));
 
 app.use(express.json());
@@ -406,6 +410,159 @@ app.get('/api/code/:code', codeRateLimiter, (req, res) => {
         return res.status(404).json({ error: 'Code not found or expired' });
     }
     res.json({ roomId: entry.roomId });
+});
+
+// ---------------------------------------------------------------------------
+// Zero-Knowledge Temporary Storage (E2EE) REST Endpoints
+// ---------------------------------------------------------------------------
+
+const tempStorageRateLimits = new Map();
+const TEMP_STORAGE_WINDOW = 60000;
+const MAX_TEMP_UPLOADS = parseInt(process.env.MAX_TEMP_UPLOADS_PER_IP || '30', 10);
+const tempUploadLimiter = makeRateLimiter(tempStorageRateLimits, TEMP_STORAGE_WINDOW, MAX_TEMP_UPLOADS);
+
+// POST /api/temp-storage/upload/:fileId - Upload encrypted ciphertext stream
+app.post('/api/temp-storage/upload/:fileId', tempUploadLimiter, (req, res) => {
+    try {
+        const fileId = req.params.fileId;
+        if (!UUID_REGEX.test(fileId)) {
+            return res.status(400).json({ error: 'Invalid file ID format' });
+        }
+
+        let fileName = 'file';
+        try {
+            if (req.headers['x-file-name']) {
+                fileName = decodeURIComponent(req.headers['x-file-name']);
+            }
+        } catch {
+            fileName = req.headers['x-file-name'] || 'file';
+        }
+
+        const fileSize = parseInt(req.headers['x-file-size'] || '0', 10);
+        const rawTtl = parseInt(req.headers['x-ttl-hours'] || '24', 10);
+        const ttlHours = Math.min(Math.max(isNaN(rawTtl) ? 24 : rawTtl, 1), 72);
+        const burnAfterReading = req.headers['x-burn-after-reading'] === 'true' || req.headers['x-burn-after-reading'] === '1';
+        const salt = String(req.headers['x-salt'] || '');
+        const iv = String(req.headers['x-iv'] || '');
+
+        const { writeStream, record } = tempStorage.createUploadStream(fileId, {
+            fileName,
+            fileSize,
+            ttlHours,
+            burnAfterReading,
+            salt,
+            iv,
+        });
+
+        let receivedBytes = 0;
+        let aborted = false;
+
+        req.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            if (receivedBytes > tempStorage.MAX_FILE_SIZE) {
+                aborted = true;
+                req.destroy();
+                writeStream.destroy();
+                tempStorage.deleteStoredFile(fileId);
+                if (!res.headersSent) {
+                    res.status(413).json({ error: 'Dung lượng file vượt quá giới hạn 500 MB' });
+                }
+            }
+        });
+
+        req.on('close', () => {
+            if (!req.complete && !res.writableEnded) {
+                aborted = true;
+                writeStream.destroy();
+                tempStorage.deleteStoredFile(fileId);
+            }
+        });
+
+        req.on('error', (err) => {
+            aborted = true;
+            writeStream.destroy();
+            tempStorage.deleteStoredFile(fileId);
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Upload bị gián đoạn: ' + err.message });
+            }
+        });
+
+        writeStream.on('finish', () => {
+            if (aborted) return;
+            res.json({
+                success: true,
+                fileId,
+                fileName: record.fileName,
+                cipherSize: record.cipherSize,
+                expiresAt: record.expiresAt,
+                burnAfterReading: record.maxDownloads === 1,
+            });
+        });
+
+        writeStream.on('error', (err) => {
+            if (!res.headersSent) {
+                res.status(500).json({ error: 'Lỗi ghi file vào bộ nhớ tạm: ' + err.message });
+            }
+        });
+
+        req.pipe(writeStream);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// GET /api/temp-storage/meta/:fileId - Retrieve metadata for preview
+app.get('/api/temp-storage/meta/:fileId', (req, res) => {
+    const meta = tempStorage.getFileMetadata(req.params.fileId);
+    if (!meta) {
+        return res.status(404).json({ error: 'File không tồn tại hoặc đã hết hạn/tự hủy' });
+    }
+    res.json(meta);
+});
+
+// GET /api/temp-storage/download/:fileId - Download encrypted ciphertext
+app.get('/api/temp-storage/download/:fileId', (req, res) => {
+    const fileId = req.params.fileId;
+    const meta = tempStorage.getFileMetadata(fileId);
+    if (!meta) {
+        return res.status(404).json({ error: 'File không tồn tại hoặc đã hết hạn/tự hủy' });
+    }
+
+    const filePath = tempStorage.getCipherFilePath(fileId);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Không tìm thấy nội dung file' });
+    }
+
+    const stat = fs.statSync(filePath);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Length', stat.size);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(meta.fileName)}.enc"`);
+    res.setHeader('x-file-name', encodeURIComponent(meta.fileName));
+    res.setHeader('x-file-size', String(meta.fileSize));
+    res.setHeader('x-salt', meta.salt);
+    res.setHeader('x-iv', meta.iv);
+    res.setHeader('x-burn-after-reading', meta.burnAfterReading ? 'true' : 'false');
+
+    const readStream = fs.createReadStream(filePath);
+
+    res.on('finish', () => {
+        tempStorage.recordDownloadComplete(fileId);
+    });
+
+    readStream.on('error', (err) => {
+        console.error(`[TempStorage] Error streaming download for ${fileId}:`, err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Lỗi truyền tải file' });
+        }
+    });
+
+    readStream.pipe(res);
+});
+
+// DELETE /api/temp-storage/:fileId - Manually delete file
+app.delete('/api/temp-storage/:fileId', (req, res) => {
+    const deleted = tempStorage.deleteStoredFile(req.params.fileId);
+    res.json({ success: deleted });
 });
 
 // ---------------------------------------------------------------------------
