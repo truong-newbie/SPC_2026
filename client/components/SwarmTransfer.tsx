@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
-import { SwarmManager } from '@/lib/swarm';
+import { SwarmManager, packFiles, unpackFiles, type UnpackedFile, type PackedFileInfo } from '@/lib/swarm';
 import { formatBytes } from '@/lib/download';
 import { fetchIceServers } from '@/lib/relay';
 import { Button } from './Button';
@@ -23,6 +23,10 @@ import {
     ArrowDownToLine,
     RefreshCw,
     Radio,
+    Search,
+    Trash2,
+    Files,
+    Eye,
 } from 'lucide-react';
 
 interface SwarmTransferProps {
@@ -30,7 +34,8 @@ interface SwarmTransferProps {
     socketUrl?: string;
 }
 
-interface DownloadFileInfo {
+interface SwarmFileInfo {
+    fileId: string;
     name: string;
     size: number;
     totalPieces: number;
@@ -42,14 +47,21 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const [isHosting, setIsHosting] = useState(false);
     const [isDownloading, setIsDownloading] = useState(false);
 
-    // File state (Host)
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    // Host state
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [hostedFiles, setHostedFiles] = useState<PackedFileInfo[]>([]);
+    const [hostedTotalSize, setHostedTotalSize] = useState<number>(0);
     const [shareLink, setShareLink] = useState('');
     const [password, setPassword] = useState('');
 
+    // Preview state (Receiver)
+    const [isPreviewing, setIsPreviewing] = useState(false);
+    const [previewFileInfo, setPreviewFileInfo] = useState<SwarmFileInfo | null>(null);
+
     // Download state (Receiver)
     const [downloadLink, setDownloadLink] = useState('');
-    const [downloadFileInfo, setDownloadFileInfo] = useState<DownloadFileInfo | null>(null);
+    const [downloadFileInfo, setDownloadFileInfo] = useState<SwarmFileInfo | null>(null);
+    const [unpackedFiles, setUnpackedFiles] = useState<UnpackedFile[]>([]);
     const [downloadedBlob, setDownloadedBlob] = useState<Blob | null>(null);
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
@@ -72,7 +84,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
 
     const serverUrl = socketUrl || process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
 
-    // Auto-populate downloadLink if swarm parameter is in URL
+    // Auto-detect ?swarm= in URL and enter PREVIEW MODE (Never auto-download!)
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const params = new URLSearchParams(window.location.search);
@@ -80,28 +92,33 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             if (swarmParam) {
                 setDownloadLink(window.location.href);
 
-                // Pre-fetch file info if available
                 const name = params.get('name');
                 const size = parseInt(params.get('size') || '0', 10);
                 const pieces = parseInt(params.get('pieces') || '0', 10);
 
                 if (name && size > 0) {
-                    setDownloadFileInfo({
+                    setPreviewFileInfo({
+                        fileId: swarmParam,
                         name: decodeURIComponent(name),
                         size,
                         totalPieces: pieces || Math.ceil(size / (512 * 1024)),
                     });
+                    setIsPreviewing(true);
+                    setStatus('Previewing shared file(s)');
                 } else {
-                    // Try fetch from server API
+                    // Pre-fetch from server REST API
                     fetch(`${serverUrl}/api/swarm/${swarmParam}`)
                         .then((res) => res.json())
                         .then((data) => {
-                            if (data && data.fileName) {
-                                setDownloadFileInfo({
-                                    name: data.fileName,
+                            if (data && data.fileId) {
+                                setPreviewFileInfo({
+                                    fileId: data.fileId,
+                                    name: data.fileName || 'Shared Files',
                                     size: data.fileSize || 0,
                                     totalPieces: data.totalPieces || 1,
                                 });
+                                setIsPreviewing(true);
+                                setStatus('Previewing shared file(s)');
                             }
                         })
                         .catch(() => {});
@@ -127,33 +144,48 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
 
         socket.on('connect', () => {
             setIsConnected(true);
-            setStatus('Connected - Select a file to host or enter a link to download');
+            setStatus('Connected - Select files to host or enter a link to download');
         });
 
         socket.on('disconnect', () => {
             setIsConnected(false);
-            setStatus('Disconnected');
+            setStatus('Disconnected from server');
         });
 
         socket.on('connect_error', () => {
-            setError('Connection failed. Check if server is running.');
+            setError('Connection failed. Server may be offline.');
         });
 
-        // Swarm events
+        // Swarm tracker events
         socket.on('swarm-info', (info: any) => {
             if (info) {
-                if (info.fileName || info.fileSize) {
-                    setDownloadFileInfo((prev) => ({
-                        name: info.fileName || prev?.name || 'downloaded-file',
-                        size: info.fileSize || prev?.size || 0,
-                        totalPieces: info.totalPieces || prev?.totalPieces || 1,
-                    }));
-                }
                 if (typeof info.peerCount === 'number') {
                     setPeersCount(info.peerCount);
                 }
                 if (typeof info.seedCount === 'number') {
                     setSeedsCount(info.seedCount);
+                }
+                if (info.fileName || info.fileSize) {
+                    setDownloadFileInfo((prev) =>
+                        prev
+                            ? {
+                                  ...prev,
+                                  name: info.fileName || prev.name,
+                                  size: info.fileSize || prev.size,
+                                  totalPieces: info.totalPieces || prev.totalPieces,
+                              }
+                            : null
+                    );
+                    setPreviewFileInfo((prev) =>
+                        prev
+                            ? {
+                                  ...prev,
+                                  name: info.fileName || prev.name,
+                                  size: info.fileSize || prev.size,
+                                  totalPieces: info.totalPieces || prev.totalPieces,
+                              }
+                            : null
+                    );
                 }
             }
             if (swarmRef.current) {
@@ -179,10 +211,6 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             }
         });
 
-        socket.on('piece-available', ({ fileId, pieceIndex, peers }: { fileId: string; pieceIndex: number; peers: string[] }) => {
-            console.log('Piece available:', { fileId, pieceIndex, peers });
-        });
-
         socket.on('signal', ({ signal, sender }: { signal: any; sender: string }) => {
             if (swarmRef.current && sender && signal) {
                 swarmRef.current.handleSignal(sender, signal);
@@ -196,21 +224,37 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             socket.off('peer-joined');
             socket.off('peer-left');
             socket.off('peer-pieces');
-            socket.off('piece-available');
             socket.off('signal');
             swarmRef.current?.destroy();
             socket.disconnect();
         };
     }, [serverUrl]);
 
-    // Handle file selection
+    // Handle file selection (multi-file)
     const handleFileSelect = useCallback((files: FileList | null) => {
         if (!files || files.length === 0) return;
-        setSelectedFile(files[0]);
+        const incoming = Array.from(files);
+        setSelectedFiles((prev) => {
+            // Filter duplicates by name + size
+            const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`));
+            const novel = incoming.filter((f) => !existingKeys.has(`${f.name}-${f.size}`));
+            return [...prev, ...novel];
+        });
         setError('');
     }, []);
 
-    // Handle drag and drop
+    // Remove single file
+    const handleRemoveFile = useCallback((index: number) => {
+        setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    }, []);
+
+    // Clear all files
+    const handleClearFiles = useCallback(() => {
+        setSelectedFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    }, []);
+
+    // Drag and drop handlers
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(true);
@@ -227,26 +271,31 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         handleFileSelect(e.dataTransfer.files);
     }, [handleFileSelect]);
 
-    // Host file (start seeding)
+    // Start hosting selected file(s)
     const handleHost = useCallback(async () => {
-        if (!selectedFile || !socketRef.current) return;
+        if (selectedFiles.length === 0 || !socketRef.current) return;
 
         setIsHosting(true);
-        setStatus('Reading file...');
+        setStatus('Packing files for swarm...');
+        setError('');
 
         try {
-            const fileData = await selectedFile.arrayBuffer();
+            // 1. Pack files into container bundle (or single raw file)
+            const { buffer, totalSize, displayName, files } = await packFiles(selectedFiles);
+            setHostedFiles(files);
+            setHostedTotalSize(totalSize);
+
             const fileId = uuidv4();
-            const totalPieces = Math.ceil(selectedFile.size / (512 * 1024));
+            const totalPieces = Math.ceil(totalSize / (512 * 1024));
 
             const currentIceServers = iceServers.length > 0 ? iceServers : await fetchIceServers(serverUrl);
 
-            // Create swarm manager
+            // 2. Create SwarmManager
             const swarm = new SwarmManager(
                 {
                     fileId,
-                    fileName: selectedFile.name,
-                    fileSize: selectedFile.size,
+                    fileName: displayName,
+                    fileSize: totalSize,
                     iceServers: currentIceServers,
                 },
                 socketRef.current,
@@ -257,49 +306,49 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         setSeedsCount(seeds);
                     },
                     onStatus: (s) => setStatus(s),
-                    onError: (e) => setError(e),
+                    onError: (e) => {
+                        console.warn('[Swarm Host Warning]:', e);
+                    },
                 }
             );
 
-            // Assign swarmRef IMMEDIATELY so any incoming events are processed
+            // Immediately set ref so incoming signals are processed
             swarmRef.current = swarm;
 
-            // Generate password
             const pw = swarm.generatePassword();
 
-            // 1. Create swarm on server with metadata (fileName & fileSize)
+            // 3. Create swarm on server tracker with metadata
             socketRef.current.emit('create-swarm', {
                 fileId,
                 totalPieces,
-                fileName: selectedFile.name,
-                fileSize: selectedFile.size,
+                fileName: displayName,
+                fileSize: totalSize,
             });
 
-            // 2. Join swarm as seeder BEFORE announcing pieces
+            // 4. Join swarm room
             socketRef.current.emit('join-swarm', { fileId });
 
-            // 3. Start seeding (splits file into memory and announces pieces)
-            await swarm.startSeeding(fileData);
+            // 5. Start seeding pieces
+            await swarm.startSeeding(buffer);
 
-            // Create share link with file info
-            const link = `${window.location.origin}?swarm=${fileId}&name=${encodeURIComponent(selectedFile.name)}&size=${selectedFile.size}&pieces=${totalPieces}`;
+            // 6. Generate shareable link
+            const link = `${window.location.origin}?swarm=${fileId}&name=${encodeURIComponent(displayName)}&size=${totalSize}&pieces=${totalPieces}`;
             setShareLink(link);
             setPassword(pw);
             setProgress(100);
-            setStatus(`Seeding: ${selectedFile.name} (${totalPieces} pieces)`);
+            setStatus(`Seeding ${selectedFiles.length} file(s) to swarm`);
 
-        } catch (err) {
-            console.error('Host error:', err);
-            setError('Failed to host file');
+        } catch (err: any) {
+            console.error('Hosting failed:', err);
+            setError(`Failed to host: ${err?.message || err}`);
             setIsHosting(false);
         }
-    }, [selectedFile, serverUrl, iceServers]);
+    }, [selectedFiles, serverUrl, iceServers]);
 
-    // Join swarm (download)
-    const handleJoinSwarm = useCallback(async () => {
-        if (!downloadLink || !socketRef.current) return;
+    // Preview link before downloading (triggered by user typing/pasting link)
+    const handleTriggerPreview = useCallback(async () => {
+        if (!downloadLink.trim()) return;
 
-        // Extract file info from link or raw UUID
         let fileId: string | null = null;
         let fileName = '';
         let fileSize = 0;
@@ -312,7 +361,6 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             fileSize = parseInt(url.searchParams.get('size') || '0', 10);
             totalPieces = parseInt(url.searchParams.get('pieces') || '0', 10);
         } catch {
-            // Check if user entered raw UUID
             const trimmed = downloadLink.trim();
             if (/^[0-9a-fA-F-]{36}$/.test(trimmed)) {
                 fileId = trimmed;
@@ -329,7 +377,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             }
         }
 
-        // If metadata is missing in URL, query server tracker
+        // Query server tracker if size/name missing
         if (!fileName || fileSize === 0) {
             try {
                 const res = await fetch(`${serverUrl}/api/swarm/${fileId}`);
@@ -342,30 +390,50 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             } catch {}
         }
 
-        const decodedFileName = decodeURIComponent(fileName || 'downloaded-file');
-        const calculatedPieces = totalPieces || (fileSize > 0 ? Math.ceil(fileSize / (512 * 1024)) : 1);
+        const decodedFileName = decodeURIComponent(fileName || 'Shared File(s)');
+        const piecesCount = totalPieces || (fileSize > 0 ? Math.ceil(fileSize / (512 * 1024)) : 1);
 
-        setDownloadFileInfo({
+        setPreviewFileInfo({
+            fileId,
             name: decodedFileName,
             size: fileSize,
-            totalPieces: calculatedPieces,
+            totalPieces: piecesCount,
         });
 
+        setIsPreviewing(true);
+        setStatus('Previewing shared file(s) - click "Download Now" to start');
+        setError('');
+    }, [downloadLink, serverUrl]);
+
+    // Cancel preview
+    const handleCancelPreview = useCallback(() => {
+        setIsPreviewing(false);
+        setPreviewFileInfo(null);
+        setStatus('Select files to host or enter a link to download');
+    }, []);
+
+    // User confirms preview -> Start downloading!
+    const handleStartDownload = useCallback(async () => {
+        if (!previewFileInfo || !socketRef.current) return;
+
+        const info = previewFileInfo;
+        setDownloadFileInfo(info);
         setIsDownloading(true);
+        setIsPreviewing(false);
         setProgress(0);
+        setUnpackedFiles([]);
         setDownloadedBlob(null);
         setDownloadUrl(null);
-        setStatus('Connecting to swarm...');
+        setStatus('Connecting to swarm peers...');
         setError('');
 
         const currentIceServers = iceServers.length > 0 ? iceServers : await fetchIceServers(serverUrl);
 
-        // Create swarm manager with file info
         const swarm = new SwarmManager(
             {
-                fileId,
-                fileName: decodedFileName,
-                fileSize: fileSize || 1,
+                fileId: info.fileId,
+                fileName: info.name,
+                fileSize: info.size || 1,
                 iceServers: currentIceServers,
             },
             socketRef.current,
@@ -376,44 +444,75 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     setSeedsCount(seeds);
                 },
                 onStatus: (s) => setStatus(s),
-                onError: (e) => setError(e),
-                onComplete: (blob) => {
-                    const url = URL.createObjectURL(blob);
-                    setDownloadedBlob(blob);
-                    setDownloadUrl(url);
-                    setProgress(100);
-                    setStatus('Download complete! Click button below to save.');
-
-                    // Trigger browser download
+                onError: (e) => {
+                    console.warn('[Swarm Download Warning]:', e);
+                },
+                onComplete: async (blob) => {
                     try {
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = decodedFileName;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    } catch {}
+                        const buffer = await blob.arrayBuffer();
+                        const files = unpackFiles(buffer, info.name);
+                        setUnpackedFiles(files);
+
+                        const mainUrl = URL.createObjectURL(blob);
+                        setDownloadedBlob(blob);
+                        setDownloadUrl(mainUrl);
+                        setProgress(100);
+                        setStatus('Download complete! Save your files below.');
+
+                        // Auto-download if single file
+                        if (files.length === 1) {
+                            const a = document.createElement('a');
+                            a.href = mainUrl;
+                            a.download = files[0].name;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        }
+                    } catch (err) {
+                        console.error('Unpack error:', err);
+                        setStatus('Download complete (auto-save ready)');
+                    }
                 },
             }
         );
 
-        // Assign swarmRef IMMEDIATELY
         swarmRef.current = swarm;
 
-        // Join swarm on server
+        // Join swarm room on tracker
         if (socketRef.current?.connected) {
-            socketRef.current.emit('join-swarm', { fileId });
+            socketRef.current.emit('join-swarm', { fileId: info.fileId });
         } else {
             socketRef.current?.once('connect', () => {
-                socketRef.current?.emit('join-swarm', { fileId });
+                socketRef.current?.emit('join-swarm', { fileId: info.fileId });
             });
         }
 
         swarm.startDownloading();
+    }, [previewFileInfo, serverUrl, iceServers]);
 
-    }, [downloadLink, serverUrl, iceServers]);
+    // Save individual file from unpacked list
+    const handleSaveFile = useCallback((file: UnpackedFile) => {
+        const url = URL.createObjectURL(file.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }, []);
 
-    // Copy to clipboard
+    // Save all files sequentially
+    const handleSaveAllFiles = useCallback(() => {
+        if (unpackedFiles.length === 0) return;
+        unpackedFiles.forEach((file, index) => {
+            setTimeout(() => {
+                handleSaveFile(file);
+            }, index * 250);
+        });
+    }, [unpackedFiles, handleSaveFile]);
+
+    // Copy share link
     const copyShareLink = useCallback(() => {
         const fullLink = shareLink + (password ? `#${password}` : '');
         navigator.clipboard.writeText(fullLink);
@@ -426,8 +525,11 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         swarmRef.current?.destroy();
         swarmRef.current = null;
         setIsHosting(false);
+        setHostedFiles([]);
+        setHostedTotalSize(0);
         setShareLink('');
         setPassword('');
+        setSelectedFiles([]);
         setProgress(0);
         setStatus('Stopped hosting');
     }, []);
@@ -437,7 +539,10 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         swarmRef.current?.destroy();
         swarmRef.current = null;
         setIsDownloading(false);
+        setIsPreviewing(false);
         setDownloadFileInfo(null);
+        setPreviewFileInfo(null);
+        setUnpackedFiles([]);
         setDownloadedBlob(null);
         if (downloadUrl) {
             URL.revokeObjectURL(downloadUrl);
@@ -446,6 +551,8 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         setProgress(0);
         setStatus('Download cancelled');
     }, [downloadUrl]);
+
+    const totalSelectedBytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
 
     return (
         <div className={`p-6 max-w-2xl mx-auto ${className || ''}`}>
@@ -458,7 +565,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     <div>
                         <h2 className="text-xl font-bold text-gray-900">Swarm File Sharing</h2>
                         <p className="text-sm text-gray-500">
-                            P2P BitTorrent-style multi-peer transfer
+                            P2P multi-peer transfer • Multi-file support
                         </p>
                     </div>
                 </div>
@@ -473,7 +580,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                 <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2 font-medium text-gray-700">
                         <Radio className="w-4 h-4 text-blue-500 animate-pulse" />
-                        <span>{status}</span>
+                        <span className="truncate max-w-xs">{status}</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm font-semibold">
                         <div className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
@@ -526,41 +633,88 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                             <span className="font-medium text-gray-700">
-                                {progress === 100 ? 'Complete' : 'Transfer Progress'}
+                                {progress === 100 ? 'Download Finished' : 'Transfer Progress'}
                             </span>
                             <span className="font-bold text-blue-600">{progress}%</span>
                         </div>
                         <ProgressBar value={progress} />
                         <div className="flex justify-between text-xs text-gray-500 pt-1">
                             <span>
-                                {downloadFileInfo?.totalPieces ? `${Math.round((progress / 100) * downloadFileInfo.totalPieces)} / ${downloadFileInfo.totalPieces} pieces` : ''}
+                                {downloadFileInfo?.totalPieces
+                                    ? `${Math.round((progress / 100) * downloadFileInfo.totalPieces)} / ${downloadFileInfo.totalPieces} pieces`
+                                    : ''}
                             </span>
-                            <span>{seedsCount > 0 ? `${seedsCount} seeder(s) active` : 'Waiting for seeder...'}</span>
+                            <span>{seedsCount > 0 ? `${seedsCount} seeder(s) active` : 'Searching for seeds...'}</span>
                         </div>
                     </div>
 
-                    {/* Action buttons */}
-                    <div className="space-y-3 pt-2">
-                        {downloadUrl && (
-                            <a
-                                href={downloadUrl}
-                                download={downloadFileInfo?.name || 'downloaded-file'}
-                                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
-                            >
-                                <ArrowDownToLine className="w-5 h-5" />
-                                Save File to Computer
-                            </a>
-                        )}
+                    {/* Unpacked Files List (When multi-file download completes) */}
+                    {unpackedFiles.length > 0 && (
+                        <div className="space-y-3 pt-3 border-t border-gray-200">
+                            <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                    <Files className="w-4 h-4 text-blue-600" />
+                                    Received Files ({unpackedFiles.length}):
+                                </h4>
+                                {unpackedFiles.length > 1 && (
+                                    <Button
+                                        onClick={handleSaveAllFiles}
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700 text-white text-xs px-3"
+                                    >
+                                        <ArrowDownToLine className="w-3.5 h-3.5 mr-1" />
+                                        Save All Files
+                                    </Button>
+                                )}
+                            </div>
 
-                        <div className="flex gap-3">
-                            <Button
-                                onClick={handleCancelDownload}
-                                variant="outline"
-                                className="w-full text-gray-700"
-                            >
-                                {progress === 100 ? 'Leave Swarm' : 'Cancel Download'}
-                            </Button>
+                            <div className="space-y-2 max-h-56 overflow-y-auto">
+                                {unpackedFiles.map((file, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                                            <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-sm font-semibold text-gray-900 truncate">{file.name}</p>
+                                                <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
+                                            </div>
+                                        </div>
+                                        <Button
+                                            onClick={() => handleSaveFile(file)}
+                                            size="sm"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 ml-3"
+                                        >
+                                            <Download className="w-3.5 h-3.5 mr-1" />
+                                            Save
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
+                    )}
+
+                    {/* Single File Save Button (Fallback) */}
+                    {unpackedFiles.length === 0 && downloadUrl && (
+                        <a
+                            href={downloadUrl}
+                            download={downloadFileInfo?.name || 'downloaded-file'}
+                            className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
+                        >
+                            <ArrowDownToLine className="w-5 h-5" />
+                            Save File to Computer
+                        </a>
+                    )}
+
+                    <div className="pt-2">
+                        <Button
+                            onClick={handleCancelDownload}
+                            variant="outline"
+                            className="w-full text-gray-700"
+                        >
+                            {progress === 100 ? 'Leave Swarm' : 'Cancel Download'}
+                        </Button>
                     </div>
                 </div>
             )}
@@ -570,17 +724,20 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             {/* ======================================================== */}
             {isHosting && (
                 <div className="space-y-6">
-                    {/* File Seeding Info */}
                     <div className="bg-green-50 border border-green-200 rounded-2xl p-6">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
                                 <div className="p-3 bg-green-100 text-green-700 rounded-xl">
-                                    <FileText className="w-7 h-7" />
+                                    {hostedFiles.length > 1 ? <Files className="w-7 h-7" /> : <FileText className="w-7 h-7" />}
                                 </div>
                                 <div>
-                                    <h3 className="font-bold text-gray-900 break-all">{selectedFile?.name}</h3>
+                                    <h3 className="font-bold text-gray-900 break-all">
+                                        {hostedFiles.length > 1
+                                            ? `${hostedFiles.length} files (${formatBytes(hostedTotalSize)})`
+                                            : selectedFiles[0]?.name}
+                                    </h3>
                                     <p className="text-sm text-gray-600">
-                                        {selectedFile ? formatBytes(selectedFile.size) : ''} • Seeding to swarm
+                                        Seeding to swarm • Sharing with peers
                                     </p>
                                 </div>
                             </div>
@@ -590,12 +747,24 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             </span>
                         </div>
 
+                        {/* List of files being hosted */}
+                        {hostedFiles.length > 1 && (
+                            <div className="mb-4 space-y-1.5 max-h-40 overflow-y-auto bg-white/70 p-3 rounded-xl border border-green-200">
+                                {hostedFiles.map((file, idx) => (
+                                    <div key={idx} className="flex justify-between items-center text-xs">
+                                        <span className="font-medium text-gray-800 truncate mr-2">{file.name}</span>
+                                        <span className="text-gray-500 shrink-0">{formatBytes(file.size)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Share link box */}
                         {shareLink && (
                             <div className="space-y-3 mt-4 pt-4 border-t border-green-200">
                                 <div className="flex items-center gap-2 text-green-800 text-sm font-semibold">
                                     <Lock className="w-4 h-4" />
-                                    <span>Share this link to let others download:</span>
+                                    <span>Share this link for others to preview & download:</span>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 font-mono text-xs text-gray-800 border border-green-200 break-all select-all">
                                     {shareLink}
@@ -636,11 +805,68 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             )}
 
             {/* ======================================================== */}
-            {/* VIEW 3: INITIAL SCREEN (Drop File or Paste Link)         */}
+            {/* VIEW 3: PREVIEW MODE (Before Downloading)                */}
             {/* ======================================================== */}
-            {!isHosting && !isDownloading && (
+            {isPreviewing && previewFileInfo && !isDownloading && !isHosting && (
+                <div className="bg-white border-2 border-blue-300 rounded-2xl p-6 shadow-sm space-y-6">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-100 text-blue-600 rounded-xl">
+                                <Eye className="w-8 h-8" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded uppercase tracking-wider">
+                                        File Preview
+                                    </span>
+                                </div>
+                                <h3 className="text-lg font-bold text-gray-900 mt-1 break-all">
+                                    {previewFileInfo.name}
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-0.5">
+                                    {previewFileInfo.size ? formatBytes(previewFileInfo.size) : 'Unknown size'} • {previewFileInfo.totalPieces} pieces
+                                </p>
+                            </div>
+                        </div>
+                        <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
+                            <span className="w-2 h-2 bg-green-500 rounded-full" />
+                            {seedsCount > 0 ? `${seedsCount} Seeds Available` : 'Swarm Active'}
+                        </span>
+                    </div>
+
+                    <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-600 space-y-1 border border-gray-200">
+                        <p className="font-medium text-gray-800">Ready to download via P2P Swarm?</p>
+                        <p className="text-xs text-gray-500">
+                            Files will be transferred in pieces directly from active seeders in the room.
+                        </p>
+                    </div>
+
+                    <div className="flex gap-3">
+                        <Button
+                            onClick={handleStartDownload}
+                            disabled={!isConnected}
+                            className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-semibold"
+                        >
+                            <Download className="w-5 h-5 mr-2" />
+                            Download Now
+                        </Button>
+                        <Button
+                            onClick={handleCancelPreview}
+                            variant="outline"
+                            className="text-gray-700 px-5"
+                        >
+                            Cancel
+                        </Button>
+                    </div>
+                </div>
+            )}
+
+            {/* ======================================================== */}
+            {/* VIEW 4: INITIAL SCREEN (Upload Multiple Files or Link)   */}
+            {/* ======================================================== */}
+            {!isHosting && !isDownloading && !isPreviewing && (
                 <div className="space-y-6">
-                    {/* Host section: Drop Zone */}
+                    {/* Host section: Multi-file Drop Zone */}
                     <div
                         className={`border-2 border-dashed rounded-2xl p-8 text-center transition-colors cursor-pointer ${
                             isDragging
@@ -654,70 +880,101 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     >
                         <Upload className="w-12 h-12 mx-auto text-blue-500 mb-3" />
                         <p className="font-semibold text-gray-800 mb-1">
-                            {selectedFile ? selectedFile.name : 'Drop file here to host on Swarm'}
+                            {selectedFiles.length > 0
+                                ? `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`
+                                : 'Drop file(s) here to host on Swarm'}
                         </p>
                         <p className="text-sm text-gray-500">
-                            {selectedFile ? formatBytes(selectedFile.size) : 'or click to browse from device'}
+                            {selectedFiles.length > 0
+                                ? `${formatBytes(totalSelectedBytes)} total`
+                                : 'or click to browse from device (multi-file supported)'}
                         </p>
 
                         <input
                             ref={fileInputRef}
                             type="file"
+                            multiple
                             className="hidden"
                             onChange={(e) => handleFileSelect(e.target.files)}
                         />
 
-                        {selectedFile && (
-                            <Button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleHost();
-                                }}
-                                disabled={!isConnected || isHosting}
-                                className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white"
-                            >
-                                <Upload className="w-4 h-4 mr-2" />
-                                Start Hosting This File
-                            </Button>
+                        {/* Selected files list */}
+                        {selectedFiles.length > 0 && (
+                            <div className="mt-4 space-y-2 max-h-48 overflow-y-auto text-left">
+                                {selectedFiles.map((file, idx) => (
+                                    <div
+                                        key={idx}
+                                        className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                            <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-xs font-semibold text-gray-900 truncate">{file.name}</p>
+                                                <p className="text-[11px] text-gray-500">{formatBytes(file.size)}</p>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleRemoveFile(idx);
+                                            }}
+                                            className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                            title="Remove file"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {selectedFiles.length > 0 && (
+                            <div className="mt-4 flex gap-2" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                    onClick={handleHost}
+                                    disabled={!isConnected || isHosting}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                                >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Start Hosting {selectedFiles.length} File{selectedFiles.length > 1 ? 's' : ''} ({formatBytes(totalSelectedBytes)})
+                                </Button>
+                                <Button
+                                    onClick={handleClearFiles}
+                                    variant="outline"
+                                    className="text-gray-600 hover:text-red-600"
+                                >
+                                    Clear
+                                </Button>
+                            </div>
                         )}
                     </div>
 
-                    {/* Download section: Paste Link */}
+                    {/* Download section: Input Swarm Link / ID */}
                     <div className="pt-6 border-t border-gray-200">
                         <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                             <Download className="w-4 h-4 text-blue-600" />
                             Download from Swarm
                         </h3>
 
-                        {/* If preview info was fetched from URL, show it */}
-                        {downloadFileInfo && downloadFileInfo.name && (
-                            <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <FileText className="w-5 h-5 text-blue-600" />
-                                    <div>
-                                        <p className="text-sm font-semibold text-gray-900">{downloadFileInfo.name}</p>
-                                        <p className="text-xs text-gray-500">{downloadFileInfo.size ? formatBytes(downloadFileInfo.size) : 'Unknown size'}</p>
-                                    </div>
-                                </div>
-                                <span className="text-xs font-semibold text-blue-700 bg-blue-100 px-2 py-1 rounded">Ready to Join</span>
-                            </div>
-                        )}
-
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder="Paste swarm share link or swarm ID..."
+                                placeholder="Paste swarm share link or swarm room ID..."
                                 value={downloadLink}
                                 onChange={(e) => setDownloadLink(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleTriggerPreview();
+                                }}
                                 className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             />
                             <Button
-                                onClick={handleJoinSwarm}
+                                onClick={handleTriggerPreview}
                                 disabled={!isConnected || !downloadLink.trim()}
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-5"
                             >
-                                <Download className="w-4 h-4 mr-2" />
-                                Join & Download
+                                <Search className="w-4 h-4 mr-2" />
+                                Preview
                             </Button>
                         </div>
                     </div>

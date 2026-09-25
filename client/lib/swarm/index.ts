@@ -25,3 +25,6 @@ export {
     DEFAULT_PIECE_SIZE,
 } from './piece';
 export type { PieceInfo, PieceSelectionOptions } from './piece';
+
+export { packFiles, unpackFiles } from './pack';
+export type { PackedFileInfo, UnpackedFile } from './pack';

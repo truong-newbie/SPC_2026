@@ -207,6 +207,17 @@ export class SwarmManager {
             this.peerPieceMap.set(peer.peerId, new Set(peer.pieces));
         }
 
+        // Deterministic connection to existing peers in swarm:
+        // Smaller socket ID initiates to larger socket ID to prevent glare
+        const myId = this.socket?.id || '';
+        for (const peer of info.peers) {
+            if (peer.peerId !== myId && !this.peers.has(peer.peerId)) {
+                if (myId && myId < peer.peerId) {
+                    this.connectToPeer(peer.peerId, true);
+                }
+            }
+        }
+
         // Request pieces if downloading
         if (!this.isSeeding && this.peers.size > 0) {
             this.requestNextPiece();
@@ -217,10 +228,14 @@ export class SwarmManager {
      * Handle peer joined
      */
     handlePeerJoined(peerId: string): void {
-        this.callbacks.onStatus?.(`Peer joined: ${peerId.substring(0, 8)}`);
+        this.callbacks.onStatus?.(`Peer discovered: ${peerId.substring(0, 8)}`);
 
-        // Initiate WebRTC connection to new peer
-        this.connectToPeer(peerId, true);
+        // Deterministic connection: smaller socket ID initiates to larger socket ID
+        const myId = this.socket?.id || '';
+        const shouldInitiate = myId ? (myId < peerId) : true;
+        if (shouldInitiate) {
+            this.connectToPeer(peerId, true);
+        }
         this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
     }
 
@@ -322,11 +337,25 @@ export class SwarmManager {
             return;
         }
 
-        peer.peer.send(JSON.stringify({
-            type: 'request-piece',
-            fileId: this.config.fileId,
-            pieceIndex,
-        }));
+        try {
+            peer.peer.send(JSON.stringify({
+                type: 'request-piece',
+                fileId: this.config.fileId,
+                pieceIndex,
+            }));
+
+            // Auto-retry request if not received within 8 seconds
+            setTimeout(() => {
+                if (this.pendingRequests.has(pieceIndex) && !this.heldPieces.has(pieceIndex)) {
+                    this.pendingRequests.delete(pieceIndex);
+                    if (!this.isSeeding) {
+                        this.requestNextPiece();
+                    }
+                }
+            }, 8000);
+        } catch {
+            this.pendingRequests.delete(pieceIndex);
+        }
     }
 
     /**
@@ -396,17 +425,32 @@ export class SwarmManager {
      * Handle incoming WebRTC signaling data for a peer
      */
     handleSignal(peerId: string, signal: any): void {
+        const myId = this.socket?.id || '';
         let conn = this.peers.get(peerId);
+
+        // Glare resolution (polite peer yields):
+        // If we created an offer, but haven't connected yet, and received an offer from a peer with lower ID:
+        if (conn && !conn.isConnected && signal && signal.type === 'offer') {
+            if (myId && myId > peerId) {
+                try {
+                    conn.peer.destroy();
+                } catch {}
+                this.peers.delete(peerId);
+                conn = undefined;
+            }
+        }
+
         if (!conn) {
             // Incoming connection from a peer - connect as non-initiator
             this.connectToPeer(peerId, false);
             conn = this.peers.get(peerId);
         }
+
         if (conn && conn.peer && !conn.peer.destroyed) {
             try {
                 conn.peer.signal(signal);
-            } catch (err) {
-                console.error(`Error signaling peer ${peerId}:`, err);
+            } catch (err: any) {
+                console.warn(`[Swarm] Signal handling note for ${peerId.substring(0, 8)}:`, err?.message || err);
             }
         }
     }
@@ -429,6 +473,9 @@ export class SwarmManager {
             readableObjectMode: true,
             config: { iceServers: this.iceServers },
         });
+
+        // Store peer connection immediately
+        this.peers.set(peerId, { peerId, peer, pieces: new Set(), isConnected: false });
 
         peer.on('signal', (data) => {
             // Send signal through server
@@ -474,22 +521,22 @@ export class SwarmManager {
 
         peer.on('close', () => {
             this.removePeer(peerId);
+            this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
             if (!this.isSeeding) {
                 this.pendingRequests.clear();
                 this.requestNextPiece();
             }
         });
 
-        peer.on('error', (err) => {
-            console.error(`Peer ${peerId} error:`, err);
+        peer.on('error', (err: any) => {
+            console.warn(`[Swarm] Peer ${peerId.substring(0, 8)} note:`, err?.message || err);
             this.removePeer(peerId);
+            this.callbacks.onPeersUpdate?.(this.getPeerCount(), this.getSeedCount());
             if (!this.isSeeding) {
                 this.pendingRequests.clear();
                 this.requestNextPiece();
             }
         });
-
-        this.peers.set(peerId, { peerId, peer, pieces: new Set(), isConnected: false });
     }
 
     /**
