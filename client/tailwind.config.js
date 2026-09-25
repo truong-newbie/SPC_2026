@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: 'class',
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',
@@ -7,6 +8,17 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        cyber: {
+          50: '#ecfeff',
+          100: '#cffafe',
+          400: '#22d3ee',
+          500: '#06b6d4',
+          600: '#0891b2',
+          800: '#155e75',
+          900: '#164e63',
+        },
+        darkbg: '#05070d',
+        darkcard: '#0a0f1d',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
@@ -36,6 +48,10 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+      },
+      boxShadow: {
+        'glow': '0 0 35px -5px rgba(6, 182, 212, 0.25)',
+        'glow-emerald': '0 0 35px -5px rgba(16, 185, 129, 0.25)',
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'FileBridge — Direct P2P & Zero-Knowledge E2EE Transfer (SPC 2026)',
-  description: 'Nền tảng truyền tệp P2P ngang hàng siêu tốc và lưu trữ tạm thời Zero-Knowledge E2EE. Dự án SPC 2026.',
+  description: 'Nền tảng truyền tệp P2P trực tiếp và lưu trữ tạm thời Zero-Knowledge E2EE. Không trung gian, không nén tệp, bảo mật tuyệt đối. Dự án tham dự SPC 2026.',
 };
 
 export default function RootLayout({
@@ -12,11 +12,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-900 dark:to-blue-900">
-        <main className="container mx-auto px-4 py-8">
-          {children}
-        </main>
+    <html lang="vi" className="dark scroll-smooth">
+      <body className="ambient-mesh text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-28">
+        {children}
       </body>
     </html>
   );
