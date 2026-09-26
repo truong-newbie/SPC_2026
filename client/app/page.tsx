@@ -47,7 +47,6 @@ export default function Home() {
     const [activeTab, setActiveTab] = useState<TabType>('transfer');
     const [transferMode, setTransferMode] = useState<TransferMode>('p2p');
     const [currentLang, setCurrentLang] = useState<'vi' | 'en'>('vi');
-    const [isEarthBg, setIsEarthBg] = useState<boolean>(true); // Mặc định BẬT NỀN TRÁI ĐẤT (FileDeli style)
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -93,7 +92,7 @@ export default function Home() {
     return (
         <div className="flex flex-col min-h-screen relative">
             {/* =================================================================== */}
-            {/* COSMIC EARTH DYNAMIC BACKGROUND (FileDeli Style - Default: ON) */}
+            {/* COSMIC EARTH DYNAMIC BACKGROUND (FileDeli Style - Permanent Default) */}
             {/* =================================================================== */}
             <div id="dynamic-bg-container" className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
                 {/* 3D Earth Video Loop */}
@@ -102,9 +101,7 @@ export default function Home() {
                     loop
                     muted
                     playsInline
-                    className={`w-full h-full object-cover scale-105 transition-opacity duration-700 ${
-                        isEarthBg ? 'opacity-40' : 'opacity-0'
-                    }`}
+                    className="w-full h-full object-cover scale-105 opacity-40"
                 >
                     <source src="/videos/bg-earth.mp4" type="video/mp4" />
                     <source src="/bg.mp4" type="video/mp4" />
@@ -163,20 +160,9 @@ export default function Home() {
                         </div>
                     </button>
 
-                    {/* Status Indicator, Bg Switcher & Live Signal */}
-                    <div className="flex items-center gap-2.5">
-                        {/* Earth Background Toggle */}
-                        <button
-                            onClick={() => setIsEarthBg(prev => !prev)}
-                            title="Bật/Tắt hiệu ứng Trái Đất FileDeli"
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-cyan-500/40 text-[11px] font-mono text-slate-300 hover:text-white transition-all active:scale-95"
-                        >
-                            <span className={`w-2 h-2 rounded-full ${isEarthBg ? 'bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]' : 'bg-slate-500'}`} />
-                            <span className="hidden sm:inline">{isEarthBg ? 'Nền: Trái Đất (FileDeli)' : 'Nền: Lưới Tối Giản'}</span>
-                            <span className="sm:hidden">{isEarthBg ? 'Trái Đất' : 'Lưới'}</span>
-                        </button>
-
-                        <div className="hidden md:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
+                    {/* Status Indicator & Live Signal */}
+                    <div className="flex items-center gap-3">
+                        <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
                             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                             <span>P2P DataChannel: Sẵn sàng</span>
                         </div>

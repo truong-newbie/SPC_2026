@@ -218,15 +218,9 @@
                 </div>
             </button>
 
-            <!-- Status Indicator, Bg Switcher & Live Signal -->
-            <div class="flex items-center gap-2.5">
-                <!-- Earth Background Toggle Button -->
-                <button onclick="toggleEarthBackground()" title="Bật/Tắt hiệu ứng Trái Đất FileDeli" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-cyan-500/40 text-[11px] font-mono text-slate-300 hover:text-white transition-all active:scale-95">
-                    <span id="earth-toggle-dot" class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
-                    <span id="earth-toggle-label">Nền: Trái Đất (FileDeli)</span>
-                </button>
-
-                <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
+            <!-- Status Indicator & Live Signal -->
+            <div class="flex items-center gap-3">
+                <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span>P2P DataChannel: Sẵn sàng</span>
                 </div>
@@ -1118,24 +1112,6 @@
             currentLang = currentLang === 'vi' ? 'en' : 'vi';
             document.getElementById('lang-text').innerText = currentLang === 'vi' ? 'VIE' : 'ENG';
             document.getElementById('lang-btn').firstElementChild.innerText = currentLang === 'vi' ? '🇻🇳' : '🇬🇧';
-        }
-
-        let bgEarthMode = 1;
-        function toggleEarthBackground() {
-            const video = document.getElementById('earth-video');
-            const label = document.getElementById('earth-toggle-label');
-            const dot = document.getElementById('earth-toggle-dot');
-            if (bgEarthMode === 1) {
-                bgEarthMode = 0;
-                video.style.opacity = '0';
-                label.innerText = 'Nền: Lưới Tối Giản';
-                dot.className = 'w-2 h-2 rounded-full bg-slate-500';
-            } else {
-                bgEarthMode = 1;
-                video.style.opacity = '0.4';
-                label.innerText = 'Nền: Trái Đất (FileDeli)';
-                dot.className = 'w-2 h-2 rounded-full bg-cyan-400';
-            }
         }
     </script>
 </body>
