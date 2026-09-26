@@ -60,7 +60,7 @@ export default function Home() {
             } else if (params.get('swarm')) {
                 setTransferMode('swarm');
                 setActiveTab('transfer');
-            } else if (hash.startsWith('room-') || params.get('room')) {
+            } else if (hash.startsWith('room=') || hash.startsWith('room-') || params.get('room')) {
                 setTransferMode('p2p');
                 setActiveTab('transfer');
             } else if (['about', 'security', 'privacy', 'faq', 'roadmap', 'transfer'].includes(hash)) {

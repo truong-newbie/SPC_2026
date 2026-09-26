@@ -13,6 +13,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="dark scroll-smooth">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.global = window;
+              window.process = window.process || { env: { DEBUG: undefined }, browser: true, version: '', nextTick: function(fn) { setTimeout(fn, 0); } };
+            `,
+          }}
+        />
+      </head>
       <body className="bg-[#04070e] text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36 relative">
         {children}
       </body>
