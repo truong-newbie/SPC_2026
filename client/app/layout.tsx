@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi" className="dark scroll-smooth">
-      <body className="bg-grid-pattern text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36">
+      <body className="bg-[#04070e] text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36 relative">
         {children}
       </body>
     </html>

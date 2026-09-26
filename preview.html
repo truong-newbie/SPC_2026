@@ -169,12 +169,29 @@
         }
     </style>
 </head>
-<body class="bg-grid-pattern text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36">
+<body class="bg-[#04070e] text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36 relative">
+
+    <!-- =================================================================== -->
+    <!-- COSMIC EARTH DYNAMIC BACKGROUND (FileDeli Style) -->
+    <!-- =================================================================== -->
+    <div id="dynamic-bg-container" class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <!-- 3D Earth Video Loop (Direct FileDeli Asset & Local Fallback) -->
+        <video id="earth-video" autoplay loop muted playsinline class="w-full h-full object-cover opacity-40 scale-105 transition-all duration-700">
+            <source src="./client/public/videos/bg-earth.mp4" type="video/mp4">
+            <source src="https://filedeli.com/bg.mp4" type="video/mp4">
+        </video>
+        <!-- Dark Vignette & Atmospheric Radial Mask for 100% Crisp Contrast -->
+        <div class="absolute inset-0 bg-[#04070e]/40 backdrop-blur-[0.5px]"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_20%,_transparent_10%,_#04070e_85%)]"></div>
+        <div class="absolute inset-0 bg-gradient-to-b from-[#04070e]/60 via-transparent to-[#04070e]"></div>
+        <!-- Cybernetic Coordinate Grid Overlay -->
+        <div class="absolute inset-0 opacity-20 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:36px_36px]"></div>
+    </div>
 
     <!-- =================================================================== -->
     <!-- TOP CRAFTED NAVIGATION BAR -->
     <!-- =================================================================== -->
-    <header class="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#04070e]/85 backdrop-blur-xl">
+    <header class="sticky top-0 z-40 w-full border-b border-white/[0.08] bg-[#04070e]/80 backdrop-blur-xl">
         <div class="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
             <!-- Brand Logo with Linear-Grade Emblem -->
             <button onclick="switchTab('transfer')" class="flex items-center gap-3.5 group text-left focus:outline-none">
@@ -201,9 +218,15 @@
                 </div>
             </button>
 
-            <!-- Status Indicator & Live Signal -->
-            <div class="flex items-center gap-3">
-                <div class="hidden sm:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
+            <!-- Status Indicator, Bg Switcher & Live Signal -->
+            <div class="flex items-center gap-2.5">
+                <!-- Earth Background Toggle Button -->
+                <button onclick="toggleEarthBackground()" title="Bật/Tắt hiệu ứng Trái Đất FileDeli" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.08] hover:border-cyan-500/40 text-[11px] font-mono text-slate-300 hover:text-white transition-all active:scale-95">
+                    <span id="earth-toggle-dot" class="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]"></span>
+                    <span id="earth-toggle-label">Nền: Trái Đất (FileDeli)</span>
+                </button>
+
+                <div class="hidden md:flex items-center gap-2 px-3 py-1 rounded-lg bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-300">
                     <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                     <span>P2P DataChannel: Sẵn sàng</span>
                 </div>
@@ -218,7 +241,7 @@
     <!-- =================================================================== -->
     <!-- MAIN CONTAINER -->
     <!-- =================================================================== -->
-    <main class="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 pt-10 pb-16">
+    <main class="flex-1 max-w-4xl mx-auto w-full px-4 sm:px-6 pt-10 pb-16 relative z-10">
 
         <!-- =================================================================== -->
         <!-- TAB 0: TRUYỀN TỆP (DEFAULT FIRST SCREEN) -->
@@ -1095,6 +1118,24 @@
             currentLang = currentLang === 'vi' ? 'en' : 'vi';
             document.getElementById('lang-text').innerText = currentLang === 'vi' ? 'VIE' : 'ENG';
             document.getElementById('lang-btn').firstElementChild.innerText = currentLang === 'vi' ? '🇻🇳' : '🇬🇧';
+        }
+
+        let bgEarthMode = 1;
+        function toggleEarthBackground() {
+            const video = document.getElementById('earth-video');
+            const label = document.getElementById('earth-toggle-label');
+            const dot = document.getElementById('earth-toggle-dot');
+            if (bgEarthMode === 1) {
+                bgEarthMode = 0;
+                video.style.opacity = '0';
+                label.innerText = 'Nền: Lưới Tối Giản';
+                dot.className = 'w-2 h-2 rounded-full bg-slate-500';
+            } else {
+                bgEarthMode = 1;
+                video.style.opacity = '0.4';
+                label.innerText = 'Nền: Trái Đất (FileDeli)';
+                dot.className = 'w-2 h-2 rounded-full bg-cyan-400';
+            }
         }
     </script>
 </body>
