@@ -43,6 +43,20 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const [currentFileName, setCurrentFileName] = useState<string>('');
     const [isCopying, setIsCopying] = useState(false);
 
+    // Dynamic Tab Title during transfer
+    useEffect(() => {
+        if (typeof document === 'undefined') return;
+        if (progress > 0 && progress < 100) {
+            const fileLabel = currentFileName ? ` ${currentFileName}` : '';
+            const speedLabel = transferSpeed ? ` (${transferSpeed})` : '';
+            document.title = `[${Math.round(progress)}%] Đang truyền${fileLabel}${speedLabel} — FileBridge`;
+        } else if (progress === 100) {
+            document.title = `(✓ Hoàn thành) Đã truyền tệp xong — FileBridge`;
+        } else {
+            document.title = 'FileBridge — Truyền tệp P2P & Lưu trữ E2EE Zero-Knowledge (SPC 2026)';
+        }
+    }, [progress, currentFileName, transferSpeed]);
+
     // File management
     const { files, isDragging, totalBytes, handleFileSelection, handleDeleteFile, handleDragOver, handleDragLeave, handleDrop } = useFileManagement();
     const { relayEnabled } = useRelayConfiguration();

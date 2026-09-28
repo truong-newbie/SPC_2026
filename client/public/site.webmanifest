@@ -1,0 +1,26 @@
+{
+  "name": "FileBridge — Direct P2P & Zero-Knowledge E2EE",
+  "short_name": "FileBridge",
+  "description": "Nền tảng truyền tệp P2P WebRTC trực tiếp và lưu trữ tạm thời Zero-Knowledge E2EE. Dự án tham dự SPC 2026.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}
