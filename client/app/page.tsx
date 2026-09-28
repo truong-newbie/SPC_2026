@@ -78,24 +78,11 @@ export default function Home() {
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
                     {/* Brand Logo */}
                     <a href="#transfer-card" className="flex items-center gap-2.5 shrink-0 group">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-500 p-[1.5px] shadow-sm transition-transform group-hover:scale-105">
-                            <div className="w-full h-full bg-white rounded-[10px] flex items-center justify-center">
-                                <svg
-                                    className="w-4 h-4 text-blue-600 group-hover:text-blue-700 transition-colors"
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                >
-                                    <path d="M4 11V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5" />
-                                    <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
-                                    <path d="m9 11 3 3 3-3" />
-                                    <circle cx="12" cy="14" r="1" />
-                                </svg>
-                            </div>
-                        </div>
+                        <img
+                            src="/logo.png"
+                            alt="FileBridge Logo"
+                            className="w-9 h-9 object-contain transition-transform group-hover:scale-105"
+                        />
                         <div className="flex items-center gap-2">
                             <span className="font-extrabold text-lg tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">
                                 FileBridge
@@ -609,10 +596,10 @@ export default function Home() {
             {/* =================================================================== */}
             <footer className="border-t border-slate-200/80 bg-white py-8 text-xs text-slate-500 font-medium">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>
+                    <div className="flex items-center gap-2.5">
+                        <img src="/logo.png" alt="FileBridge Logo" className="w-5 h-5 object-contain" />
                         <span className="text-slate-900 font-bold">FileBridge</span>
-                        <span>• SPC 2026 Student Programming Competition</span>
+                        <span>• Tác giả: Đỗ Đăng Trường • Dự án tham dự SPC 2026</span>
                     </div>
                     <div className="flex items-center gap-5 text-slate-600 font-semibold">
                         <a href="#transfer-card" className="hover:text-blue-600 transition-colors">
