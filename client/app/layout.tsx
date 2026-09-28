@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" className="dark scroll-smooth">
+    <html lang="vi" className="scroll-smooth">
       <head>
         <script
           dangerouslySetInnerHTML={{
@@ -30,7 +30,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="bg-[#04070e] text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500/30 selection:text-cyan-200 pb-36 relative">
+      <body className="light-bg text-slate-700 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 pb-20 relative">
         {children}
       </body>
     </html>

@@ -389,8 +389,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             {/* Receiver Notification */}
             {isReceiver && (
                 <div className="text-center mb-6">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
-                        <Download className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        <Download className="w-3.5 h-3.5 text-blue-600" />
                         Đang kết nối nhận tệp P2P trực tiếp
                     </span>
                 </div>
@@ -399,23 +399,23 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             {/* Connection Status */}
             <div className="flex items-center justify-center gap-2 mb-6">
                 {signaling.isConnected ? (
-                    <div className="flex items-center gap-2 text-emerald-400">
+                    <div className="flex items-center gap-2 text-emerald-600">
                         <Wifi className="h-4 w-4" />
-                        <span className="text-xs font-medium">Signaling Connected</span>
+                        <span className="text-xs font-semibold">Signaling Connected</span>
                         {signaling.ping > 0 && (
-                            <span className="text-xs text-slate-400">
+                            <span className="text-xs text-slate-500 font-mono">
                                 ({signaling.ping}ms)
                             </span>
                         )}
                     </div>
                 ) : (
-                    <div className="flex items-center gap-2 text-amber-400">
+                    <div className="flex items-center gap-2 text-amber-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-xs">Đang kết nối signaling...</span>
+                        <span className="text-xs font-medium">Đang kết nối signaling...</span>
                     </div>
                 )}
                 {connectionType && (
-                    <div className={`text-xs px-2.5 py-0.5 rounded-full font-mono ${connectionType === 'direct' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'}`}>
+                    <div className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold ${connectionType === 'direct' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
                         {connectionType === 'direct' ? 'Direct P2P' : 'Relay TURN'}
                     </div>
                 )}
@@ -423,7 +423,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
             {/* Error Display */}
             {error && (
-                <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+                <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm font-medium">
                     {error}
                 </div>
             )}
@@ -436,15 +436,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        className={`border-2 border-dashed rounded-2xl p-8 sm:p-12 text-center transition-all cursor-pointer ${
+                        className={`border-2 border-dashed rounded-3xl p-8 sm:p-14 text-center transition-all cursor-pointer ${
                             isDragging
-                                ? 'border-cyan-400 bg-cyan-950/20 shadow-glow'
-                                : 'border-cyan-500/30 hover:border-cyan-400 bg-cyan-950/5 hover:bg-cyan-950/15'
+                                ? 'border-blue-500 bg-blue-50/80 shadow-md'
+                                : 'border-blue-200 hover:border-blue-500 bg-gradient-to-b from-blue-50/30 to-indigo-50/20 hover:bg-blue-50/70'
                         }`}
                     >
-                        <Upload className="h-12 w-12 mx-auto mb-3 text-cyan-400" />
-                        <p className="text-base font-bold text-white mb-1">Kéo thả tập tin vào đây hoặc nhấn duyệt file</p>
-                        <p className="text-xs text-slate-400 mb-4">Hỗ trợ truyền đa file đồng thời. Không nén, bảo toàn 100% chất lượng gốc.</p>
+                        <Upload className="h-12 w-12 mx-auto mb-3 text-blue-600" />
+                        <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tập tin vào đây hoặc nhấn duyệt file</p>
+                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền đa file đồng thời. Không nén, bảo toàn 100% chất lượng gốc.</p>
                         <label>
                             <input
                                 type="file"
@@ -452,7 +452,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 onChange={handleFileSelection}
                                 className="hidden"
                             />
-                            <Button asChild className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-glow">
+                            <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
                                 <span className="cursor-pointer">Duyệt tập tin</span>
                             </Button>
                         </label>
@@ -462,10 +462,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     {files.length > 0 && (
                         <div className="mt-6 space-y-2">
                             <div className="flex justify-between items-center mb-2">
-                                <span className="text-sm font-medium">
+                                <span className="text-sm font-bold text-slate-800">
                                     {files.length} file{files.length > 1 ? 's' : ''} đã chọn
                                 </span>
-                                <span className="text-sm text-slate-400">
+                                <span className="text-sm text-slate-500 font-medium">
                                     Tổng: {formatBytes(totalBytes)}
                                 </span>
                             </div>
@@ -477,7 +477,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     onDelete={handleDeleteFile}
                                 />
                             ))}
-                            <Button onClick={handleCreateLink} className="w-full mt-4 bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 text-white shadow-glow hover:opacity-95" size="lg">
+                            <Button onClick={handleCreateLink} className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-glow-btn hover:opacity-95" size="lg">
                                 Tạo liên kết chia sẻ bảo mật (P2P)
                             </Button>
                         </div>
