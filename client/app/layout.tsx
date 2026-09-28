@@ -18,7 +18,14 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{
             __html: `
               window.global = window;
-              window.process = window.process || { env: { DEBUG: undefined }, browser: true, version: '', nextTick: function(fn) { setTimeout(fn, 0); } };
+              window.process = window.process || { env: { DEBUG: undefined }, browser: true, version: '' };
+              window.process.nextTick = function(fn, ...args) {
+                if (typeof queueMicrotask === 'function') {
+                  queueMicrotask(function() { fn(...args); });
+                } else {
+                  setTimeout(function() { fn(...args); }, 0);
+                }
+              };
             `,
           }}
         />
