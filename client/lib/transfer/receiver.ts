@@ -63,25 +63,9 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
     function handleMessage(data: string | Uint8Array | ArrayBuffer): void {
         if (aborted) return;
 
-        // Framing determines type, not content
-        if (isControlFrame(data)) {
-            const text = data;
-
-            if (new TextEncoder().encode(text).byteLength > CONTROL_MSG_MAX) {
-                aborted = true;
-                partialDownloads.clear();
-                currentMetadata = null;
-                expectedSize = null;
-                cb.onError?.(
-                    'The sender sent a control message larger than ' +
-                        `${CONTROL_MSG_MAX} bytes, so the transfer was stopped.`
-                );
-                return;
-            }
-
-            const msg = classifyControl(text);
-            if (!msg) return;
-
+        // Control message (metadata, ack, end, incompatible)
+        const msg = classifyControl(data);
+        if (msg) {
             if (msg.type === 'metadata') {
                 // Protocol compatibility check on first file
                 if (!hasCheckedCompat) {
@@ -201,12 +185,14 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
         }
 
         // Binary frame: file data
+        if (typeof data === 'string') return;
         const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
         if (!currentMetadata) return;
         const fileData = partialDownloads.get(currentMetadata.id);
         if (!fileData) return;
 
-        fileData.chunks.push(new Uint8Array(buf).buffer);
+        const chunkBuffer = (buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer);
+        fileData.chunks.push(chunkBuffer);
         fileData.received += buf.byteLength;
         receiveSpeedBytes += buf.byteLength;
 

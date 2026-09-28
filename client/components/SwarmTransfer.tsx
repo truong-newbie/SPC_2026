@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { v4 as uuidv4 } from 'uuid';
-import { SwarmManager, packFiles, unpackFiles, type UnpackedFile, type PackedFileInfo } from '@/lib/swarm';
+import { SwarmManager, packFiles, unpackFiles, DEFAULT_PIECE_SIZE, type UnpackedFile, type PackedFileInfo } from '@/lib/swarm';
 import { formatBytes } from '@/lib/download';
 import { fetchIceServers } from '@/lib/relay';
 import { Button } from './Button';
@@ -286,7 +286,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             setHostedTotalSize(totalSize);
 
             const fileId = uuidv4();
-            const totalPieces = Math.ceil(totalSize / (512 * 1024));
+            const totalPieces = Math.ceil(totalSize / DEFAULT_PIECE_SIZE) || 1;
 
             const currentIceServers = iceServers.length > 0 ? iceServers : await fetchIceServers(serverUrl);
 
@@ -391,7 +391,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         }
 
         const decodedFileName = decodeURIComponent(fileName || 'Shared File(s)');
-        const piecesCount = totalPieces || (fileSize > 0 ? Math.ceil(fileSize / (512 * 1024)) : 1);
+        const piecesCount = totalPieces || (fileSize > 0 ? Math.ceil(fileSize / DEFAULT_PIECE_SIZE) : 1);
 
         setPreviewFileInfo({
             fileId,

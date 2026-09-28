@@ -74,6 +74,7 @@ export class SwarmManager {
     private filePieces: Map<number, ArrayBuffer>; // Pieces we hold (as seeder or leecher)
     private heldPieces: Set<number>; // Pieces we have (as leecher or seeder)
     private pendingRequests: Set<number>; // Pieces being requested
+    private incomingPieceChunks: Map<number, Map<number, ArrayBuffer>> = new Map();
 
     // Peer management
     private peers: Map<string, PeerConnection>;
@@ -505,16 +506,28 @@ export class SwarmManager {
 
         peer.on('data', (data) => {
             try {
-                const msg = JSON.parse(data.toString());
+                let text: string;
+                if (typeof data === 'string') {
+                    text = data;
+                } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(data)) {
+                    text = data.toString('utf-8');
+                } else {
+                    const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data);
+                    text = new TextDecoder().decode(uint8);
+                }
+                const msg = JSON.parse(text);
                 this.handlePeerMessage(peerId, msg);
             } catch {
-                // Binary piece data
-                if (data instanceof ArrayBuffer) {
-                    // This is a piece!
-                    const pieceIndex = this.extractPieceIndex(data);
+                // Binary piece data: [4 bytes pieceIndex] + [raw payload]
+                try {
+                    const uint8 = data instanceof Uint8Array ? data : new Uint8Array(data);
+                    const arrayBuf = uint8.buffer.slice(uint8.byteOffset, uint8.byteOffset + uint8.byteLength);
+                    const pieceIndex = this.extractPieceIndex(arrayBuf);
                     if (pieceIndex !== null) {
-                        this.handleReceivedPiece(pieceIndex, data);
+                        this.handleReceivedPiece(pieceIndex, arrayBuf.slice(4));
                     }
+                } catch (e) {
+                    console.warn('[Swarm] Failed to process binary piece:', e);
                 }
             }
         });
@@ -554,6 +567,17 @@ export class SwarmManager {
                 this.handlePieceRequest(peerId, msg.pieceIndex);
                 break;
 
+            case 'piece-chunk':
+                if (msg.pieceIndex !== undefined && msg.data) {
+                    this.handleReceivedPieceChunk(
+                        msg.pieceIndex,
+                        msg.chunkIndex,
+                        msg.totalChunks,
+                        this.base64ToArrayBuffer(msg.data)
+                    );
+                }
+                break;
+
             case 'piece-data':
                 if (msg.pieceIndex !== undefined && msg.data) {
                     const buffer = this.base64ToArrayBuffer(msg.data);
@@ -564,7 +588,7 @@ export class SwarmManager {
     }
 
     /**
-     * Handle piece request from peer
+     * Handle piece request from peer - chunked below 16KB to prevent RTCDataChannel buffer overflow
      */
     private handlePieceRequest(peerId: string, pieceIndex: number): void {
         const piece = this.filePieces.get(pieceIndex);
@@ -573,12 +597,66 @@ export class SwarmManager {
         const peer = this.peers.get(peerId);
         if (!peer || !peer.isConnected) return;
 
-        // Send piece
-        peer.peer.send(JSON.stringify({
-            type: 'piece-data',
-            pieceIndex,
-            data: this.arrayBufferToBase64(piece),
-        }));
+        // Split piece into 16KB sub-chunks to strictly stay under RTCDataChannel message limit (64KB cap)
+        const CHUNK_SIZE = 16 * 1024;
+        const totalChunks = Math.ceil(piece.byteLength / CHUNK_SIZE) || 1;
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, piece.byteLength);
+            const chunkSlice = piece.slice(start, end);
+
+            try {
+                peer.peer.send(JSON.stringify({
+                    type: 'piece-chunk',
+                    pieceIndex,
+                    chunkIndex: i,
+                    totalChunks,
+                    data: this.arrayBufferToBase64(chunkSlice),
+                }));
+            } catch (err: any) {
+                console.warn(`[Swarm] Failed sending chunk ${i}/${totalChunks} to ${peerId.substring(0, 8)}:`, err?.message || err);
+                break;
+            }
+        }
+    }
+
+    /**
+     * Assemble received piece chunks
+     */
+    private handleReceivedPieceChunk(
+        pieceIndex: number,
+        chunkIndex: number,
+        totalChunks: number,
+        chunkData: ArrayBuffer
+    ): void {
+        if (this.heldPieces.has(pieceIndex)) return;
+
+        let chunks = this.incomingPieceChunks.get(pieceIndex);
+        if (!chunks) {
+            chunks = new Map<number, ArrayBuffer>();
+            this.incomingPieceChunks.set(pieceIndex, chunks);
+        }
+        chunks.set(chunkIndex, chunkData);
+
+        if (chunks.size === totalChunks) {
+            let totalBytes = 0;
+            const ordered: ArrayBuffer[] = [];
+            for (let i = 0; i < totalChunks; i++) {
+                const c = chunks.get(i);
+                if (!c) return; // missing a chunk
+                ordered.push(c);
+                totalBytes += c.byteLength;
+            }
+            const merged = new Uint8Array(totalBytes);
+            let offset = 0;
+            for (const c of ordered) {
+                merged.set(new Uint8Array(c), offset);
+                offset += c.byteLength;
+            }
+            this.incomingPieceChunks.delete(pieceIndex);
+            this.handleReceivedPiece(pieceIndex, merged.buffer);
+        }
     }
 
     /**
@@ -664,6 +742,7 @@ export class SwarmManager {
         this.filePieces.clear();
         this.heldPieces.clear();
         this.peerPieceMap.clear();
+        this.incomingPieceChunks.clear();
     }
 
     /**

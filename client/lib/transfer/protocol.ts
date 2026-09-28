@@ -173,8 +173,8 @@ export function compatErrorMessage(
 
 // --- Control Message Classifier ---
 
-export function isControlFrame(data: string | ArrayBuffer | Uint8Array): data is string {
-    return typeof data === 'string';
+export function isControlFrame(data: string | ArrayBuffer | Uint8Array): boolean {
+    return classifyControl(data) !== null;
 }
 
 export function classifyControl(data: string | ArrayBuffer | Uint8Array): ControlMessage | null {
