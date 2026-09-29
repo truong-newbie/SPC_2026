@@ -154,3 +154,4 @@ export function SpeedWaveform({ currentBps, isActive, className = '' }: SpeedWav
         </div>
     );
 }
+
