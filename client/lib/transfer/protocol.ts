@@ -33,6 +33,7 @@ export interface Metadata {
     pv?: number;
     pvMin?: number;
     ver?: string;
+    checksum?: string;
 }
 
 export interface Ack {
@@ -70,7 +71,8 @@ export function metadataMessage(
     index: number,
     total: number,
     totalBytes: number,
-    ver?: string
+    ver?: string,
+    checksum?: string
 ): string {
     return JSON.stringify({
         type: 'metadata',
@@ -83,6 +85,7 @@ export function metadataMessage(
         pv: PROTOCOL_VERSION,
         pvMin: MIN_PROTOCOL_VERSION,
         ver,
+        checksum,
     } satisfies Metadata);
 }
 

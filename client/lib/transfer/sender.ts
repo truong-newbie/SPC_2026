@@ -21,6 +21,7 @@ import {
     type Ack,
     type Incompatible,
 } from './protocol';
+import { computeSHA256 } from '@/lib/crypto/checksum';
 
 export interface SenderCallbacks {
     onFileStart?: (index: number, total: number, fileName: string) => void;
@@ -207,8 +208,15 @@ async function sendSingleFile(
 
     channel.bufferedAmountLowThreshold = LOW_WATER;
 
+    let checksum: string | undefined;
     try {
-        send(metadataMessage(id, file.name, file.size, index, total, totalBytes));
+        checksum = await computeSHA256(file);
+    } catch {
+        // graceful fallback
+    }
+
+    try {
+        send(metadataMessage(id, file.name, file.size, index, total, totalBytes, undefined, checksum));
     } catch {
         return false;
     }

@@ -15,22 +15,42 @@ import { useFileManagement } from '@/hooks/useFileManagement';
 import { useRelayConfiguration } from '@/hooks/useRelayConfiguration';
 import { sendFiles } from '@/lib/transfer/sender';
 import { createReceiver, type ReceivedFile } from '@/lib/transfer/receiver';
-import { getRoomFromUrl, buildShareLink, isValidRoomId } from '@/lib/roomLink';
+import { getRoomFromUrl, buildShareLink, isValidRoomId, extractRoomId } from '@/lib/roomLink';
 import { formatBytes, formatSpeed, formatETA, downloadBlob } from '@/lib/download';
 import { DEFAULT_ICE_SERVERS, fetchIceServers, filterIceServers } from '@/lib/relay';
+import { soundManager } from '@/lib/audio';
+import { requestNotificationPermission, sendTransferNotification } from '@/lib/notification';
+import { formatHashShort } from '@/lib/crypto/checksum';
+import { QRScannerModal } from './QRScannerModal';
+import { QRCodeSVG } from 'qrcode.react';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileCard } from './FileCard';
-import { Download, Upload, Copy, Check, Wifi, Loader2 } from 'lucide-react';
+import {
+    Download,
+    Upload,
+    Copy,
+    Check,
+    Wifi,
+    Loader2,
+    Volume2,
+    VolumeX,
+    QrCode,
+    Camera,
+    ShieldCheck,
+    AlertTriangle,
+} from 'lucide-react';
 
 interface P2PTransferProps {
     className?: string;
 }
 
 export default function P2PTransfer({ className }: P2PTransferProps) {
-    // Room and role detection
-    const roomId = typeof window !== 'undefined' ? getRoomFromUrl(window.location.hash, window.location.search) : null;
-    const isReceiver = Boolean(roomId);
+    // Room and role detection with reactive hash listener
+    const [activeRoomId, setActiveRoomId] = useState<string | null>(() => {
+        return typeof window !== 'undefined' ? getRoomFromUrl(window.location.hash, window.location.search) : null;
+    });
+    const isReceiver = Boolean(activeRoomId);
 
     // Transfer state
     const [status, setStatus] = useState<string>(isReceiver ? 'Connecting...' : 'Select files to send');
@@ -42,6 +62,23 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const [connectionType, setConnectionType] = useState<'direct' | 'relay' | null>(null);
     const [currentFileName, setCurrentFileName] = useState<string>('');
     const [isCopying, setIsCopying] = useState(false);
+
+    // Audio & QR & Notification state
+    const [soundEnabled, setSoundEnabled] = useState(true);
+    const [showSenderQR, setShowSenderQR] = useState(false);
+    const [isQRScannerOpen, setIsQRScannerOpen] = useState(false);
+    const [manualRoomInput, setManualRoomInput] = useState('');
+
+    useEffect(() => {
+        setSoundEnabled(soundManager.isEnabled());
+
+        const handleHashChange = () => {
+            const id = getRoomFromUrl(window.location.hash, window.location.search);
+            setActiveRoomId(id);
+        };
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
+    }, []);
 
     // Dynamic Tab Title during transfer
     useEffect(() => {
@@ -211,6 +248,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     onAllSent: () => {
                         setProgress(100);
                         setStatus('All files sent!');
+                        soundManager.playSuccess();
+                        sendTransferNotification(
+                            'Đã gửi tệp thành công!',
+                            'Tất cả tệp đã được chuyển an toàn qua WebRTC P2P.'
+                        );
                     },
                     onError: (msg) => {
                         setError(msg);
@@ -241,7 +283,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         });
 
         peerRef.current = peer;
-    }, [signaling]);
+    }, [signaling, effectiveIceServers]);
 
     // Receiver: join room and create peer
     const joinAsReceiver = useCallback((roomId: string) => {
@@ -296,6 +338,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             onFileComplete: (file, index, total) => {
                 const url = URL.createObjectURL(file.blob);
                 setReceivedFiles((prev) => [...prev, { ...file, downloadUrl: url }]);
+                soundManager.playSuccess();
+                sendTransferNotification(
+                    'Đã nhận tệp thành công!',
+                    `${file.fileName} (${formatBytes(file.fileSize)}) đã được chuyển xong.`
+                );
                 if (index === total) {
                     setStatus('Transfer complete!');
                 } else {
@@ -305,6 +352,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             onAllComplete: () => {
                 setProgress(100);
                 setStatus('All files received!');
+                soundManager.playSuccess();
+                sendTransferNotification(
+                    'Hoàn tất nhận tệp!',
+                    'Toàn bộ các tệp đã được nhận và kiểm tra toàn vẹn SHA-256 thành công.'
+                );
             },
             onWaiting: () => setStatus('Waiting for next file...'),
             onError: (msg) => {
@@ -333,7 +385,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         });
 
         peerRef.current = peer;
-    }, [signaling]);
+    }, [signaling, effectiveIceServers]);
 
     // Register onUserConnected handler at top level (BEFORE any joinRoom calls)
     useEffect(() => {
@@ -344,14 +396,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
     // Receiver: mount and join room
     useEffect(() => {
-        if (!roomId || !isReceiver || !signaling.isConnected) return;
+        if (!activeRoomId || !isReceiver || !signaling.isConnected) return;
 
-        if (isValidRoomId(roomId)) {
-            joinAsReceiver(roomId);
+        if (isValidRoomId(activeRoomId)) {
+            requestNotificationPermission();
+            joinAsReceiver(activeRoomId);
         } else {
             setError('Invalid Room ID');
         }
-    }, [roomId, isReceiver, signaling.isConnected, joinAsReceiver]);
+    }, [activeRoomId, isReceiver, signaling.isConnected, joinAsReceiver]);
 
     // Generate share link (sender side)
     const handleCreateLink = () => {
@@ -359,6 +412,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             setError('Please select at least one file');
             return;
         }
+
+        requestNotificationPermission();
 
         const newRoomId = uuidv4();
         const nonce = uuidv4();
@@ -369,6 +424,29 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         setStatus('Waiting for peer...');
 
         signaling.joinRoom(newRoomId);
+    };
+
+    // Manual connect or QR scan handler
+    const handleManualConnect = () => {
+        const extractedId = extractRoomId(manualRoomInput);
+        if (!extractedId) {
+            setError('Mã phòng hoặc liên kết không hợp lệ. Vui lòng kiểm tra lại.');
+            return;
+        }
+        setError('');
+        window.location.hash = `#room=${extractedId}`;
+        setActiveRoomId(extractedId);
+    };
+
+    const handleScanSuccess = (scannedText: string) => {
+        const extractedId = extractRoomId(scannedText);
+        if (extractedId) {
+            setError('');
+            window.location.hash = `#room=${extractedId}`;
+            setActiveRoomId(extractedId);
+        } else {
+            setError('Mã QR không chứa mã phòng FileBridge hợp lệ.');
+        }
     };
 
     // Copy link to clipboard
@@ -410,35 +488,64 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                 </div>
             )}
 
-            {/* Connection Status */}
-            <div className="flex items-center justify-center gap-2 mb-6">
-                {signaling.isConnected ? (
-                    <div className="flex items-center gap-2 text-emerald-600">
-                        <Wifi className="h-4 w-4" />
-                        <span className="text-xs font-semibold">Signaling Connected</span>
-                        {signaling.ping > 0 && (
-                            <span className="text-xs text-slate-500 font-mono">
-                                ({signaling.ping}ms)
-                            </span>
+            {/* Status & Controls Bar */}
+            <div className="flex items-center justify-between max-w-2xl mx-auto mb-6 px-1">
+                <div className="flex items-center gap-2">
+                    {signaling.isConnected ? (
+                        <div className="flex items-center gap-1.5 text-emerald-600">
+                            <Wifi className="h-4 w-4" />
+                            <span className="text-xs font-semibold">Signaling Online</span>
+                            {signaling.ping > 0 && (
+                                <span className="text-[11px] text-slate-500 font-mono">
+                                    ({signaling.ping}ms)
+                                </span>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="flex items-center gap-1.5 text-amber-500">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span className="text-xs font-medium">Đang kết nối signaling...</span>
+                        </div>
+                    )}
+                    {connectionType && (
+                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${connectionType === 'direct' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
+                            {connectionType === 'direct' ? 'Direct P2P' : 'Relay TURN'}
+                        </span>
+                    )}
+                </div>
+
+                {/* Controls: Quick QR Scanner & Sound Toggle */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={() => setIsQRScannerOpen(true)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-xs"
+                        title="Quét mã QR để nhận tệp"
+                    >
+                        <Camera className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="hidden sm:inline">Quét QR</span>
+                    </button>
+                    <button
+                        onClick={() => {
+                            const next = soundManager.toggleSound();
+                            setSoundEnabled(next);
+                        }}
+                        className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-xs"
+                        title={soundEnabled ? 'Âm báo đang bật (Click để tắt)' : 'Âm báo đang tắt (Click để bật)'}
+                    >
+                        {soundEnabled ? (
+                            <Volume2 className="w-4 h-4 text-blue-600" />
+                        ) : (
+                            <VolumeX className="w-4 h-4 text-slate-400" />
                         )}
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 text-amber-500">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span className="text-xs font-medium">Đang kết nối signaling...</span>
-                    </div>
-                )}
-                {connectionType && (
-                    <div className={`text-xs px-2.5 py-0.5 rounded-full font-mono font-semibold ${connectionType === 'direct' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                        {connectionType === 'direct' ? 'Direct P2P' : 'Relay TURN'}
-                    </div>
-                )}
+                    </button>
+                </div>
             </div>
 
             {/* Error Display */}
             {error && (
-                <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm font-medium">
-                    {error}
+                <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium flex items-center justify-between">
+                    <span>{error}</span>
+                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">✕</button>
                 </div>
             )}
 
@@ -458,7 +565,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     >
                         <Upload className="h-12 w-12 mx-auto mb-3 text-blue-600" />
                         <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tập tin vào đây hoặc nhấn duyệt file</p>
-                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền đa file đồng thời. Không nén, bảo toàn 100% chất lượng gốc.</p>
+                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền đa file đồng thời. Tính toán SHA-256 bảo toàn toàn vẹn dữ liệu gốc.</p>
                         <label>
                             <input
                                 type="file"
@@ -496,52 +603,121 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             </Button>
                         </div>
                     )}
+
+                    {/* Join room / QR Scanner option */}
+                    <div className="mt-8 pt-6 border-t border-slate-200">
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-blue-50/60 border border-blue-100 rounded-2xl p-4">
+                            <div className="text-left w-full sm:w-auto">
+                                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                    <Download className="w-3.5 h-3.5 text-blue-600" />
+                                    Bạn muốn nhận tệp từ thiết bị khác?
+                                </h4>
+                                <p className="text-xs text-slate-500 mt-0.5">Dán mã phòng, liên kết hoặc quét mã QR bằng camera.</p>
+                            </div>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <input
+                                    type="text"
+                                    placeholder="Mã phòng hoặc link..."
+                                    value={manualRoomInput}
+                                    onChange={(e) => setManualRoomInput(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
+                                    className="flex-1 sm:w-44 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-slate-700"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsQRScannerOpen(true)}
+                                    className="bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shrink-0 text-xs gap-1"
+                                    title="Quét mã QR bằng Camera"
+                                >
+                                    <Camera className="w-3.5 h-3.5 text-blue-600" />
+                                    <span className="hidden sm:inline">Quét</span>
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleManualConnect}
+                                    disabled={!manualRoomInput.trim()}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 text-xs"
+                                >
+                                    Nhận
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
 
             {/* Generated Link Panel */}
             {!isReceiver && generatedLink && (
-                <div className="max-w-2xl mx-auto">
-                    <div className="bg-card border rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Check className="h-5 w-5 text-green-600" />
-                            <span className="font-medium">Link ready!</span>
+                <div className="max-w-2xl mx-auto space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Check className="h-5 w-5 text-emerald-600" />
+                                <span className="font-bold text-slate-800">Liên kết chia sẻ đã sẵn sàng!</span>
+                            </div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setShowSenderQR(!showSenderQR)}
+                                className="gap-1.5 text-xs text-slate-700 border-slate-200 hover:bg-slate-50"
+                            >
+                                <QrCode className="w-3.5 h-3.5 text-blue-600" />
+                                {showSenderQR ? 'Ẩn mã QR' : 'Hiện mã QR'}
+                            </Button>
                         </div>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Share this link with the receiver. The room ID is hidden in the URL fragment
-                            and never sent to our server.
+                        <p className="text-xs text-slate-500 mb-4">
+                            Gửi liên kết này cho người nhận hoặc cho họ quét mã QR. Mã phòng được lưu trong URL fragment, không bao giờ gửi đến máy chủ.
                         </p>
                         <div className="flex gap-2">
                             <input
                                 type="text"
                                 value={generatedLink}
                                 readOnly
-                                className="flex-1 px-3 py-2 bg-muted rounded-md text-sm font-mono truncate"
+                                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 truncate"
                             />
-                            <Button onClick={handleCopyLink} variant="outline">
+                            <Button onClick={handleCopyLink} variant="outline" className="shrink-0 gap-1.5">
                                 {isCopying ? (
-                                    <Check className="h-4 w-4" />
+                                    <>
+                                        <Check className="h-4 w-4 text-emerald-600" />
+                                        <span className="text-xs text-emerald-600">Đã chép</span>
+                                    </>
                                 ) : (
-                                    <Copy className="h-4 w-4" />
+                                    <>
+                                        <Copy className="h-4 w-4" />
+                                        <span className="text-xs">Sao chép</span>
+                                    </>
                                 )}
                             </Button>
                         </div>
+
+                        {/* Inline QR Code Display */}
+                        {showSenderQR && (
+                            <div className="mt-5 p-5 bg-gradient-to-b from-slate-50 to-blue-50/30 border border-blue-100 rounded-2xl flex flex-col items-center justify-center gap-2 animate-in fade-in duration-200">
+                                <div className="p-3 bg-white rounded-xl shadow-xs border border-slate-200">
+                                    <QRCodeSVG value={generatedLink} size={180} level="M" />
+                                </div>
+                                <span className="text-xs font-medium text-slate-600 mt-2">
+                                    Người nhận dùng Camera điện thoại hoặc tính năng "Quét QR" trên FileBridge để kết nối tức thì
+                                </span>
+                            </div>
+                        )}
                     </div>
 
                     {/* Transfer Status */}
-                    <div className="mt-6 bg-card border rounded-xl p-6 shadow-sm">
-                        <p className="text-center text-lg mb-4">{status}</p>
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                        <p className="text-center font-semibold text-slate-800 mb-4">{status}</p>
                         {progress > 0 && (
                             <>
                                 <ProgressBar value={progress} className="mb-2" />
-                                <div className="flex justify-between text-sm text-muted-foreground">
-                                    <span>{currentFileName}</span>
-                                    <span>{progress}%</span>
+                                <div className="flex justify-between text-xs text-slate-500">
+                                    <span className="truncate max-w-[240px] font-medium text-slate-700">{currentFileName}</span>
+                                    <span className="font-bold text-blue-600">{progress}%</span>
                                 </div>
                                 {transferSpeed && (
-                                    <div className="flex justify-between text-sm text-muted-foreground mt-1">
-                                        <span>{transferSpeed}</span>
-                                        <span>{estimatedTime}</span>
+                                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                        <span>Tốc độ: <strong className="text-slate-700">{transferSpeed}</strong></span>
+                                        <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
                             </>
@@ -552,45 +728,92 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
             {/* Receiver Panel */}
             {isReceiver && (
-                <div className="max-w-2xl mx-auto">
-                    <div className="bg-card border rounded-xl p-6 shadow-sm">
-                        <div className="flex items-center gap-2 mb-4">
-                            <Download className="h-5 w-5 text-primary" />
-                            <span className="font-medium">Receiving Files</span>
+                <div className="max-w-2xl mx-auto space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-2">
+                                <Download className="h-5 w-5 text-blue-600" />
+                                <span className="font-bold text-slate-800">Đang nhận tệp P2P</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                                <span>Xác thực SHA-256</span>
+                            </div>
                         </div>
-                        <p className="text-center text-lg mb-4">{status}</p>
+                        <p className="text-center font-semibold text-slate-800 mb-4">{status}</p>
 
                         {progress > 0 && (
                             <>
                                 <ProgressBar value={progress} className="mb-2" />
-                                <div className="flex justify-between text-sm text-muted-foreground">
-                                    <span className="truncate">{currentFileName}</span>
-                                    <span>{progress}%</span>
+                                <div className="flex justify-between text-xs text-slate-500">
+                                    <span className="truncate max-w-[240px] font-medium text-slate-700">{currentFileName}</span>
+                                    <span className="font-bold text-blue-600">{progress}%</span>
                                 </div>
                                 {transferSpeed && (
-                                    <div className="flex justify-between text-sm text-muted-foreground mt-1">
-                                        <span>{transferSpeed}</span>
-                                        <span>{estimatedTime}</span>
+                                    <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                        <span>Tốc độ: <strong className="text-slate-700">{transferSpeed}</strong></span>
+                                        <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
                             </>
                         )}
 
-                        {/* Received Files */}
+                        {/* Received Files with SHA-256 Badges */}
                         {receivedFiles.length > 0 && (
-                            <div className="mt-6 space-y-2">
-                                <h3 className="font-medium">Received Files</h3>
+                            <div className="mt-6 space-y-3">
+                                <h3 className="font-bold text-sm text-slate-800 flex items-center justify-between">
+                                    <span>Tệp đã nhận ({receivedFiles.length})</span>
+                                    <span className="text-xs font-normal text-slate-500">Toàn vẹn mật mã SHA-256</span>
+                                </h3>
                                 {receivedFiles.map((f) => (
-                                    <div key={f.id} className="flex items-center justify-between bg-muted rounded-lg p-3">
-                                        <div className="flex-1 min-w-0">
-                                            <p className="truncate text-sm font-medium">{f.fileName}</p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {formatBytes(f.fileSize)}
-                                            </p>
+                                    <div key={f.id} className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-2.5 transition-all hover:bg-slate-50">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="truncate text-sm font-semibold text-slate-800">{f.fileName}</p>
+                                                <p className="text-xs text-slate-500">{formatBytes(f.fileSize)}</p>
+                                            </div>
+                                            <Button
+                                                onClick={() => handleDownload(f)}
+                                                size="sm"
+                                                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 gap-1.5 shadow-xs"
+                                            >
+                                                <Download className="w-3.5 h-3.5" />
+                                                Tải về
+                                            </Button>
                                         </div>
-                                        <Button onClick={() => handleDownload(f)} variant="outline" size="sm">
-                                            Download
-                                        </Button>
+
+                                        {/* SHA-256 Integrity Verification Badge */}
+                                        {f.checksum && (
+                                            <div className="flex items-center flex-wrap gap-2 pt-1 border-t border-slate-200/60 text-xs font-mono">
+                                                {f.checksumVerified === true ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-medium border border-emerald-300">
+                                                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                                        SHA-256: {formatHashShort(f.checksum)} (Toàn vẹn 100%)
+                                                    </span>
+                                                ) : f.checksumVerified === false ? (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 text-red-800 font-medium border border-red-300">
+                                                        <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                                        Cảnh báo SHA-256 không khớp!
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
+                                                        <ShieldCheck className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                                                        SHA-256: {formatHashShort(f.checksum)}
+                                                    </span>
+                                                )}
+                                                <button
+                                                    onClick={() => {
+                                                        if (f.checksum) {
+                                                            navigator.clipboard.writeText(f.checksum);
+                                                        }
+                                                    }}
+                                                    className="text-slate-400 hover:text-slate-700 text-[11px] underline ml-auto cursor-pointer"
+                                                    title={`Sao chép mã SHA-256: ${f.checksum}`}
+                                                >
+                                                    Sao chép hash
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -598,6 +821,13 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     </div>
                 </div>
             )}
+
+            {/* Live Camera QR Code Scanner Modal */}
+            <QRScannerModal
+                isOpen={isQRScannerOpen}
+                onClose={() => setIsQRScannerOpen(false)}
+                onScan={handleScanSuccess}
+            />
         </div>
     );
 }

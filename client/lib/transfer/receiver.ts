@@ -20,12 +20,15 @@ import {
     type Metadata,
     type Incompatible,
 } from './protocol';
+import { computeSHA256 } from '@/lib/crypto/checksum';
 
 export interface ReceivedFile {
     id: string;
     fileName: string;
     fileSize: number;
     blob: Blob;
+    checksum?: string;
+    checksumVerified?: boolean;
 }
 
 export interface ReceiverCallbacks {
@@ -60,7 +63,7 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
     let receiveSpeedBytes = 0;
     let lastReceiveSpeedUpdate = 0;
 
-    function handleMessage(data: string | Uint8Array | ArrayBuffer): void {
+    async function handleMessage(data: string | Uint8Array | ArrayBuffer): Promise<void> {
         if (aborted) return;
 
         // Control message (metadata, ack, end, incompatible)
@@ -159,11 +162,26 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
                 }
 
                 const blob = new Blob(fileData.chunks);
+
+                let calculatedChecksum: string | undefined;
+                let checksumVerified: boolean | undefined;
+
+                if (currentMetadata.checksum) {
+                    try {
+                        calculatedChecksum = await computeSHA256(blob);
+                        checksumVerified = calculatedChecksum.toLowerCase() === currentMetadata.checksum.toLowerCase();
+                    } catch {
+                        // ignore
+                    }
+                }
+
                 const completed: ReceivedFile = {
                     id: currentMetadata.id,
                     fileName: currentMetadata.fileName,
                     fileSize: fileData.received,
                     blob,
+                    checksum: calculatedChecksum || currentMetadata.checksum,
+                    checksumVerified,
                 };
 
                 partialDownloads.delete(currentMetadata.id);
