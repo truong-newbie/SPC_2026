@@ -40,6 +40,9 @@ import {
     Camera,
     ShieldCheck,
     AlertTriangle,
+    Share2,
+    Zap,
+    Shield,
 } from 'lucide-react';
 
 interface P2PTransferProps {
@@ -54,7 +57,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const isReceiver = Boolean(activeRoomId);
 
     // Transfer state
-    const [status, setStatus] = useState<string>(isReceiver ? 'Connecting...' : 'Select files to send');
+    const [status, setStatus] = useState<string>(isReceiver ? 'Đang kết nối vào phòng...' : 'Chọn tệp để bắt đầu gửi');
     const [generatedLink, setGeneratedLink] = useState<string>('');
     const [error, setError] = useState<string>('');
     const [progress, setProgress] = useState<number>(0);
@@ -130,17 +133,17 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
     const onPeerDisconnected = useCallback(() => {
         if (!destroyedRef.current) {
-            setError('Peer disconnected');
-            setStatus('Connection lost');
+            setError('Thiết bị đối tác đã ngắt kết nối');
+            setStatus('Mất kết nối P2P');
         }
     }, []);
 
     const onDisconnect = useCallback(() => {
-        setStatus('Disconnected from server');
+        setStatus('Đã ngắt kết nối máy chủ signaling');
     }, []);
 
     const onConnectError = useCallback((err: Error) => {
-        setError(`Connection error: ${err.message}`);
+        setError(`Lỗi kết nối signaling: ${err.message}`);
     }, []);
 
     const onReconnect = useCallback(() => {
@@ -148,7 +151,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         hasJoinedRef.current = false;
         joinedRoomRef.current = null;
         setError('');
-        setStatus(isReceiver ? 'Reconnected. Click link again.' : 'Select files to send');
+        setStatus(isReceiver ? 'Đã kết nối lại signaling. Vui lòng thử lại.' : 'Chọn tệp để bắt đầu gửi');
     }, [isReceiver]);
 
     const signaling = useSignaling({
@@ -191,7 +194,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             peerRef.current.destroy();
         }
 
-        setStatus('Peer joined. Starting transfer...');
+        setStatus('Người nhận đã tham gia. Đang khởi tạo kết nối P2P...');
 
         const peer = new SimplePeer({
             initiator: true,
@@ -207,17 +210,17 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         });
 
         peer.on('connect', () => {
-            setStatus('Connected!');
+            setStatus('Đã kết nối P2P thành công!');
             checkConnectionType(peer);
 
             // Start sending files
             const filesToSend = filesRef.current;
             if (filesToSend.length === 0) {
-                setStatus('Connected. Waiting...');
+                setStatus('Đã kết nối. Đang chờ...');
                 return;
             }
 
-            setStatus('Sending files...');
+            setStatus('Đang gửi tệp qua P2P...');
             const peerForSender = peer;
 
             const channel = (peer as any)._channel as RTCDataChannel | undefined;
@@ -234,7 +237,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                 filesToSend.map((f) => ({ id: f.id, file: f.file })),
                 {
                     onFileStart: (index, total, fileName) => {
-                        setStatus(`Sending file ${index + 1} of ${total}: ${fileName}`);
+                        setStatus(`Đang gửi tệp ${index + 1}/${total}: ${fileName}`);
                         setCurrentFileName(fileName);
                         setProgress(0);
                     },
@@ -251,7 +254,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     },
                     onAllSent: () => {
                         setProgress(100);
-                        setStatus('All files sent!');
+                        setStatus('Đã gửi toàn bộ tệp thành công!');
                         soundManager.playSuccess();
                         sendTransferNotification(
                             'Đã gửi tệp thành công!',
@@ -260,7 +263,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     },
                     onError: (msg) => {
                         setError(msg);
-                        setStatus('Transfer failed');
+                        setStatus('Quá trình truyền tệp thất bại');
                     },
                     isDestroyed: () => destroyedRef.current || peer.destroyed,
                 }
@@ -274,15 +277,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
         peer.on('close', () => {
             if (!destroyedRef.current) {
-                setError('Connection closed');
-                setStatus('Connection closed');
+                setError('Đã đóng kết nối');
+                setStatus('Đã đóng kết nối');
             }
         });
 
         peer.on('error', (err) => {
             if (!destroyedRef.current) {
-                setError(`Connection error: ${err.message}`);
-                setStatus('Connection error');
+                setError(`Lỗi kết nối P2P: ${err.message}`);
+                setStatus('Lỗi kết nối P2P');
             }
         });
 
@@ -295,11 +298,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         hasJoinedRef.current = true;
         joinedRoomRef.current = roomId;
 
-        setStatus('Connecting...');
+        setStatus('Đang kết nối vào phòng...');
 
         signaling.onRoomFull(() => {
-            setError('Link Expired or Busy');
-            setStatus('Access Denied');
+            setError('Liên kết phòng đã hết hạn hoặc đang bận');
+            setStatus('Từ chối truy cập');
         });
 
         signaling.joinRoom(roomId);
@@ -318,7 +321,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         });
 
         peer.on('connect', () => {
-            setStatus('Connected!');
+            setStatus('Đã kết nối P2P thành công!');
             checkConnectionType(peer);
         });
 
@@ -326,7 +329,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         const rx = createReceiver({
             send: (d) => peer.send(d),
             onFileStart: (index, total, fileName, fileSize) => {
-                setStatus(`Receiving file ${index} of ${total}: ${fileName}`);
+                setStatus(`Đang nhận tệp ${index}/${total}: ${fileName}`);
                 setCurrentFileName(fileName);
                 setProgress(0);
             },
@@ -350,24 +353,24 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     `${file.fileName} (${formatBytes(file.fileSize)}) đã được chuyển xong.`
                 );
                 if (index === total) {
-                    setStatus('Transfer complete!');
+                    setStatus('Hoàn tất nhận tệp!');
                 } else {
-                    setStatus(`Waiting for next file...`);
+                    setStatus('Đang chờ tệp tiếp theo...');
                 }
             },
             onAllComplete: () => {
                 setProgress(100);
-                setStatus('All files received!');
+                setStatus('Đã nhận toàn bộ tệp!');
                 soundManager.playSuccess();
                 sendTransferNotification(
                     'Hoàn tất nhận tệp!',
                     'Toàn bộ các tệp đã được nhận và kiểm tra toàn vẹn SHA-256 thành công.'
                 );
             },
-            onWaiting: () => setStatus('Waiting for next file...'),
+            onWaiting: () => setStatus('Đang chờ tệp tiếp theo...'),
             onError: (msg) => {
                 setError(msg);
-                setStatus('Transfer failed');
+                setStatus('Nhận tệp thất bại');
             },
         });
 
@@ -378,15 +381,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
         peer.on('close', () => {
             if (!destroyedRef.current) {
-                setError('Connection closed');
-                setStatus('Connection closed');
+                setError('Đã đóng kết nối');
+                setStatus('Đã đóng kết nối');
             }
         });
 
         peer.on('error', (err) => {
             if (!destroyedRef.current) {
-                setError(`Connection error: ${err.message}`);
-                setStatus('Connection error');
+                setError(`Lỗi kết nối WebRTC: ${err.message}`);
+                setStatus('Lỗi kết nối');
             }
         });
 
@@ -408,14 +411,14 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             requestNotificationPermission();
             joinAsReceiver(activeRoomId);
         } else {
-            setError('Invalid Room ID');
+            setError('Mã phòng không hợp lệ');
         }
     }, [activeRoomId, isReceiver, signaling.isConnected, joinAsReceiver]);
 
     // Generate share link (sender side)
     const handleCreateLink = () => {
         if (files.length === 0) {
-            setError('Please select at least one file');
+            setError('Vui lòng chọn ít nhất một tệp để chia sẻ');
             return;
         }
 
@@ -427,7 +430,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
         setGeneratedLink(link);
         createdRoomRef.current = newRoomId;
-        setStatus('Waiting for peer...');
+        setStatus('Đang chờ người nhận kết nối...');
 
         signaling.joinRoom(newRoomId);
     };
@@ -462,7 +465,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             setIsCopying(true);
             setTimeout(() => setIsCopying(false), 2000);
         } catch {
-            setError('Failed to copy link');
+            setError('Không thể sao chép liên kết vào clipboard');
         }
     };
 
@@ -500,7 +503,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     {signaling.isConnected ? (
                         <div className="flex items-center gap-1.5 text-emerald-600">
                             <Wifi className="h-4 w-4" />
-                            <span className="text-xs font-semibold">Signaling Online</span>
+                            <span className="text-xs font-semibold">Signaling sẵn sàng</span>
                             {signaling.ping > 0 && (
                                 <span className="text-[11px] text-slate-500 font-mono">
                                     ({signaling.ping}ms)
@@ -514,8 +517,29 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         </div>
                     )}
                     {connectionType && (
-                        <span className={`text-[11px] px-2 py-0.5 rounded-full font-mono font-semibold ${connectionType === 'direct' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'}`}>
-                            {connectionType === 'direct' ? 'Direct P2P' : 'Relay TURN'}
+                        <span
+                            className={`inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-full font-medium shadow-xs ${
+                                connectionType === 'direct'
+                                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                    : 'bg-blue-50 text-blue-700 border border-blue-200'
+                            }`}
+                            title={
+                                connectionType === 'direct'
+                                    ? 'Kết nối ngang hàng P2P trực tiếp (Không qua máy chủ trung gian, tốc độ tối đa theo mạng nội bộ/Internet).'
+                                    : 'Chuyển tiếp qua máy chủ TURN Relay (Tự động kích hoạt để xuyên tường lửa 4G/LTE hoặc NAT đối xứng. Tệp được mã hóa đầu-cuối an toàn 100%).'
+                            }
+                        >
+                            {connectionType === 'direct' ? (
+                                <>
+                                    <Zap className="w-3 h-3 text-emerald-600" />
+                                    <span>P2P Trực tiếp</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Shield className="w-3 h-3 text-blue-600" />
+                                    <span>Chuyển tiếp TURN (4G/NAT)</span>
+                                </>
+                            )}
                         </span>
                     )}
                 </div>
@@ -780,14 +804,35 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                                 <p className="truncate text-sm font-semibold text-slate-800">{f.fileName}</p>
                                                 <p className="text-xs text-slate-500">{formatBytes(f.fileSize)}</p>
                                             </div>
-                                            <Button
-                                                onClick={() => handleDownload(f)}
-                                                size="sm"
-                                                className="bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 gap-1.5 shadow-xs"
-                                            >
-                                                <Download className="w-3.5 h-3.5" />
-                                                Tải về
-                                            </Button>
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                <Button
+                                                    asChild
+                                                    size="sm"
+                                                    className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-xs"
+                                                >
+                                                    <a
+                                                        href={f.downloadUrl}
+                                                        download={f.fileName}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                    >
+                                                        <Download className="w-3.5 h-3.5" />
+                                                        Tải về
+                                                    </a>
+                                                </Button>
+                                                {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        size="sm"
+                                                        onClick={() => handleDownload(f)}
+                                                        className="px-2.5 text-slate-700 hover:text-blue-600 hover:bg-blue-50 border-slate-200"
+                                                        title="Lưu hoặc chia sẻ sang ứng dụng khác (Zalo, Tệp, Photos...)"
+                                                    >
+                                                        <Share2 className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
 
                                         {/* SHA-256 Integrity Verification Badge */}

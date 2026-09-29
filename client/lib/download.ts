@@ -3,15 +3,49 @@
  */
 
 export function downloadBlob(blob: Blob, fileName: string): void {
+    if (typeof navigator !== 'undefined' && typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+        try {
+            const file = new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
+            if (navigator.canShare({ files: [file] })) {
+                navigator.share({
+                    files: [file],
+                    title: fileName,
+                }).catch(() => {
+                    triggerAnchorDownload(blob, fileName);
+                });
+                return;
+            }
+        } catch {
+            // fallback
+        }
+    }
+
+    triggerAnchorDownload(blob, fileName);
+}
+
+function triggerAnchorDownload(blob: Blob, fileName: string): void {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
+    a.style.display = 'none';
     a.href = url;
     a.download = fileName;
+    a.rel = 'noopener noreferrer';
+    if (typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        a.target = '_blank';
+    }
     document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+
+    setTimeout(() => {
+        try {
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch {
+            // ignore
+        }
+    }, 60000);
 }
+
 
 /**
  * Sanitizes display text for safe rendering.
