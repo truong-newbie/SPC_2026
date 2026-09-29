@@ -82,9 +82,6 @@ export default function Home() {
                         <img
                             src="/logo.png"
                             alt="FileBridge Logo"
-                            width={36}
-                            height={36}
-                            style={{ maxWidth: '36px', maxHeight: '36px' }}
                             className="w-9 h-9 object-contain transition-transform group-hover:scale-105"
                         />
                         <div className="flex items-center gap-2">
@@ -603,14 +600,7 @@ export default function Home() {
             <footer className="border-t border-slate-200/80 bg-white py-8 text-xs text-slate-500 font-medium">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2.5">
-                        <img
-                            src="/logo.png"
-                            alt="FileBridge Logo"
-                            width={20}
-                            height={20}
-                            style={{ maxWidth: '20px', maxHeight: '20px' }}
-                            className="w-5 h-5 object-contain"
-                        />
+                        <img src="/logo.png" alt="FileBridge Logo" className="w-5 h-5 object-contain" />
                         <span className="text-slate-900 font-bold">FileBridge</span>
                         <span>• Tác giả: Đỗ Đăng Trường • Dự án tham dự SPC 2026</span>
                     </div>

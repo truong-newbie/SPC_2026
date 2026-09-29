@@ -29,7 +29,7 @@ export function extractRoomId(input: string): string | null {
         const fromSearch = url.searchParams.get('room');
         if (fromSearch && isValidRoomId(fromSearch)) return fromSearch;
     } catch {
-        // Not a URL
+        // Not a valid URL
     }
     const match = trimmed.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
     if (match && isValidRoomId(match[0])) return match[0];

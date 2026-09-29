@@ -440,16 +440,16 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             return;
         }
         setError('');
-        window.location.hash = `#room=${extractedId}`;
-        setActiveRoomId(extractedId);
+        window.location.href = `${window.location.origin}/#room=${extractedId}`;
+        window.location.reload();
     };
 
     const handleScanSuccess = (scannedText: string) => {
         const extractedId = extractRoomId(scannedText);
         if (extractedId) {
             setError('');
-            window.location.hash = `#room=${extractedId}`;
-            setActiveRoomId(extractedId);
+            window.location.href = `${window.location.origin}/#room=${extractedId}`;
+            window.location.reload();
         } else {
             setError('Mã QR không chứa mã phòng FileBridge hợp lệ.');
         }
