@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { PWAInstallButton } from '@/components/PWAInstallButton';
 
 // Dynamic import of transfer components to avoid SSR WebRTC issues
 const P2PTransfer = dynamic(() => import('@/components/P2PTransfer'), {
@@ -127,8 +128,10 @@ export default function Home() {
                         </a>
                     </nav>
 
-                    {/* Actions: Status & Language */}
-                    <div className="flex items-center gap-2.5 shrink-0">
+                    {/* Actions: PWA Install & Status & Language */}
+                    <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                        <PWAInstallButton />
+
                         <div className="hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200/80 text-[11px] font-semibold text-emerald-700 whitespace-nowrap">
                             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                             <span>{isVi ? '• P2P Sẵn sàng' : '• P2P Ready'}</span>

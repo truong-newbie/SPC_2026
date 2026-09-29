@@ -23,6 +23,7 @@ import { requestNotificationPermission, sendTransferNotification } from '@/lib/n
 import { formatHashShort } from '@/lib/crypto/checksum';
 import { QRScannerModal } from './QRScannerModal';
 import { QRCodeSVG } from 'qrcode.react';
+import { SpeedWaveform } from './SpeedWaveform';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileCard } from './FileCard';
@@ -59,6 +60,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const [progress, setProgress] = useState<number>(0);
     const [transferSpeed, setTransferSpeed] = useState<string>('');
     const [estimatedTime, setEstimatedTime] = useState<string>('');
+    const [currentBps, setCurrentBps] = useState<number>(0);
     const [connectionType, setConnectionType] = useState<'direct' | 'relay' | null>(null);
     const [currentFileName, setCurrentFileName] = useState<string>('');
     const [isCopying, setIsCopying] = useState(false);
@@ -238,10 +240,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     },
                     onProgress: (percent) => setProgress(percent),
                     onSpeed: (bps, eta) => {
+                        setCurrentBps(bps);
                         setTransferSpeed(formatSpeed(bps));
                         setEstimatedTime(formatETA(eta));
                     },
                     onSpeedReset: () => {
+                        setCurrentBps(0);
                         setTransferSpeed('');
                         setEstimatedTime('');
                     },
@@ -328,10 +332,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             },
             onProgress: (percent) => setProgress(percent),
             onSpeed: (bps, eta) => {
+                setCurrentBps(bps);
                 setTransferSpeed(formatSpeed(bps));
                 setEstimatedTime(formatETA(eta));
             },
             onSpeedReset: () => {
+                setCurrentBps(0);
                 setTransferSpeed('');
                 setEstimatedTime('');
             },
@@ -720,6 +726,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                         <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
+                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} />
                             </>
                         )}
                     </div>
@@ -755,6 +762,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                         <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
+                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} />
                             </>
                         )}
 
