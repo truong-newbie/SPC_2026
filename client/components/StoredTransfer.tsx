@@ -59,11 +59,14 @@ const MAX_STORAGE_BYTES = 500 * 1024 * 1024; // 500 MB
 
 function getApiBaseUrl(): string {
     if (typeof window !== 'undefined') {
-        const envUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
-        if (envUrl && envUrl.startsWith('http')) return envUrl;
-        return `${window.location.protocol}//${window.location.hostname}:3001`;
+        // If running locally in development on localhost, target port 3001
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+            return 'http://localhost:3001';
+        }
+        // In production on filebridge.click, use relative path so Nginx reverse proxies /api/
+        return '';
     }
-    return 'http://localhost:3001';
+    return '';
 }
 
 export default function StoredTransfer({ className }: StoredTransferProps) {

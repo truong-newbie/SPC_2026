@@ -82,7 +82,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const swarmRef = useRef<SwarmManager | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const serverUrl = socketUrl || process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001';
+    const serverUrl = socketUrl || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3001' : '');
 
     // Auto-detect ?swarm= in URL and enter PREVIEW MODE (Never auto-download!)
     useEffect(() => {
@@ -107,7 +107,8 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     setStatus('Previewing shared file(s)');
                 } else {
                     // Pre-fetch from server REST API
-                    fetch(`${serverUrl}/api/swarm/${swarmParam}`)
+                    const fetchUrl = serverUrl ? `${serverUrl}/api/swarm/${swarmParam}` : `/api/swarm/${swarmParam}`;
+                    fetch(fetchUrl)
                         .then((res) => res.json())
                         .then((data) => {
                             if (data && data.fileId) {
@@ -135,7 +136,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
             .then((servers) => setIceServers(servers))
             .catch(() => {});
 
-        const socket = io(url, {
+        const socket = io(url || undefined, {
             transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 5,

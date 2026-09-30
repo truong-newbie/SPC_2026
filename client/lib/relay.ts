@@ -31,13 +31,18 @@ export async function fetchIceServers(socketUrl?: string): Promise<RTCIceServer[
     }
     try {
         let serverUrl = socketUrl || process.env.NEXT_PUBLIC_SOCKET_URL;
-        if (!serverUrl) {
+        if (serverUrl === undefined || serverUrl === null) {
             serverUrl = await resolveSocketUrl();
         }
         if (!serverUrl) {
-            serverUrl = 'http://localhost:3001';
+            if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+                serverUrl = 'http://localhost:3001';
+            } else {
+                serverUrl = '';
+            }
         }
-        const res = await fetch(`${serverUrl}/api/turn-credentials`, { signal: AbortSignal.timeout(3000) });
+        const apiUrl = serverUrl ? `${serverUrl}/api/turn-credentials` : '/api/turn-credentials';
+        const res = await fetch(apiUrl, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
             const servers = await res.json();
             if (Array.isArray(servers) && servers.length > 0) {
