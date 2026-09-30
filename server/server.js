@@ -45,17 +45,32 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 const allowedOrigins = [
     process.env.CLIENT_URL,
+    'https://filebridge.click',
+    'https://www.filebridge.click',
+    'http://filebridge.click',
+    'http://www.filebridge.click',
     'http://localhost:3000',
     'http://localhost:3002',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3002',
 ].filter(Boolean);
 
+function isOriginAllowed(origin) {
+    if (!origin) return true;
+    if (allowedOrigins.includes(origin)) return true;
+    try {
+        const u = new URL(origin);
+        if (u.hostname === 'filebridge.click' || u.hostname.endsWith('.filebridge.click') || u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+            return true;
+        }
+    } catch {}
+    return false;
+}
+
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error('Not allowed by CORS'));
+        if (isOriginAllowed(origin)) return callback(null, true);
+        return callback(new Error('Not allowed by CORS: ' + origin));
     },
     credentials: true,
     exposedHeaders: ['x-file-name', 'x-file-size', 'x-salt', 'x-iv', 'x-burn-after-reading', 'Content-Disposition'],
@@ -825,7 +840,10 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
     cors: {
-        origin: allowedOrigins,
+        origin: (origin, callback) => {
+            if (isOriginAllowed(origin)) return callback(null, true);
+            return callback(new Error('Not allowed by CORS: ' + origin));
+        },
         methods: ['GET', 'POST'],
         credentials: true,
     },

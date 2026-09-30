@@ -191,3 +191,4 @@ export function SpeedWaveform({ currentBps, isActive, isComplete = false, classN
         </div>
     );
 }
+
