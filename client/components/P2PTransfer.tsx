@@ -750,7 +750,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                         <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
-                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} />
+                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} isComplete={progress === 100} />
                             </>
                         )}
                     </div>
@@ -786,7 +786,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                         <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
-                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} />
+                                <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} isComplete={progress === 100} />
                             </>
                         )}
 
