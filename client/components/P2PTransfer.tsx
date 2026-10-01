@@ -47,7 +47,9 @@ import {
     X,
     Plus,
     RotateCcw,
+    Archive,
 } from 'lucide-react';
+import { createZip, generateZipFilename, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
 
 interface P2PTransferProps {
     className?: string;
@@ -116,6 +118,48 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
     // Received files
     const [receivedFiles, setReceivedFiles] = useState<(ReceivedFile & { downloadUrl: string })[]>([]);
+
+    // ZIP all received files
+    const [isZipping, setIsZipping] = useState(false);
+    const [zipProgress, setZipProgress] = useState<ZipProgress | null>(null);
+    const [zipError, setZipError] = useState<string | null>(null);
+
+    const handleZipAllFiles = useCallback(async () => {
+        const validFiles = receivedFiles.filter((f) => f.blob);
+        if (validFiles.length === 0) return;
+
+        const totalBytes = validFiles.reduce((sum, f) => sum + (f.fileSize || f.blob?.size || 0), 0);
+        const check = shouldZipAll(totalBytes);
+
+        if (!check.canZip) {
+            alert(check.reason + '. Vui lòng tải từng tệp riêng lẻ để tránh tràn bộ nhớ.');
+            return;
+        }
+
+        setIsZipping(true);
+        setZipProgress(null);
+        setZipError(null);
+
+        try {
+            const filesToZip = validFiles.map((f) => ({ name: f.fileName, blob: f.blob! }));
+            const zipFilename = generateZipFilename(activeRoomId || undefined);
+
+            const zipBlob = await createZip(filesToZip, {
+                filename: zipFilename,
+                onProgress: (progress) => {
+                    setZipProgress(progress);
+                },
+            });
+
+            downloadBlob(zipBlob, zipFilename);
+        } catch (err) {
+            console.error('Lỗi đóng gói ZIP:', err);
+            setZipError('Không thể tạo file ZIP: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
+        } finally {
+            setIsZipping(false);
+            setZipProgress(null);
+        }
+    }, [receivedFiles, activeRoomId]);
 
     // Peer refs
     const peerRef = useRef<PeerInstance | null>(null);
@@ -958,10 +1002,43 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         {/* Received Files with SHA-256 Badges */}
                         {receivedFiles.length > 0 && (
                             <div className="mt-6 space-y-3">
-                                <h3 className="font-bold text-sm text-slate-800 flex items-center justify-between">
-                                    <span>Tệp đã nhận ({receivedFiles.length})</span>
-                                    <span className="text-xs font-normal text-slate-500">Toàn vẹn mật mã SHA-256</span>
-                                </h3>
+                                <div className="flex items-center justify-between gap-3 flex-wrap">
+                                    <div>
+                                        <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                            <span>Tệp đã nhận ({receivedFiles.length})</span>
+                                            <span className="text-xs font-normal text-slate-500">
+                                                ({formatBytes(receivedFiles.reduce((sum, f) => sum + (f.fileSize || f.blob?.size || 0), 0))})
+                                            </span>
+                                        </h3>
+                                        <span className="text-[11px] font-normal text-slate-400">Toàn vẹn mật mã SHA-256</span>
+                                    </div>
+                                    {receivedFiles.length >= 2 && (
+                                        <Button
+                                            type="button"
+                                            onClick={handleZipAllFiles}
+                                            disabled={isZipping}
+                                            size="sm"
+                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 shadow-xs gap-1.5"
+                                        >
+                                            {isZipping ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    <span>Đang nén {zipProgress ? `${zipProgress.percent}%` : '...'}</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Archive className="w-3.5 h-3.5" />
+                                                    <span>Tải toàn bộ (.zip)</span>
+                                                </>
+                                            )}
+                                        </Button>
+                                    )}
+                                </div>
+                                {zipError && (
+                                    <p className="text-xs text-red-600 bg-red-50 p-2 rounded-lg border border-red-200">
+                                        {zipError}
+                                    </p>
+                                )}
                                 {receivedFiles.map((f) => (
                                     <div key={f.id} className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-2.5 transition-all hover:bg-slate-50">
                                         <div className="flex items-center justify-between gap-3">

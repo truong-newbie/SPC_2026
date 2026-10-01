@@ -26,11 +26,13 @@ import {
     ExternalLink,
     HardDrive,
     Key,
+    Archive,
 } from 'lucide-react';
 import { Button } from './Button';
 import { FileIcon } from './FileIcon';
 import { ProgressBar } from './ProgressBar';
 import { formatBytes, downloadBlob } from '@/lib/download';
+import { createZip, generateZipFilename, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
 import { packFiles, unpackFiles, type UnpackedFile } from '@/lib/swarm/pack';
 import {
     encryptData,
@@ -89,6 +91,8 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     const [downloadError, setDownloadError] = useState('');
     const [downloadedFiles, setDownloadedFiles] = useState<UnpackedFile[]>([]);
     const [isBurned, setIsBurned] = useState(false);
+    const [isZipping, setIsZipping] = useState(false);
+    const [zipProgress, setZipProgress] = useState<ZipProgress | null>(null);
 
     // Sender State
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -409,6 +413,36 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
         }
     };
 
+    // ZIP all unpacked files into a single archive
+    const handleZipAllFiles = useCallback(async () => {
+        if (downloadedFiles.length === 0) return;
+        const totalBytes = downloadedFiles.reduce((sum, f) => sum + f.size, 0);
+        const check = shouldZipAll(totalBytes);
+        if (!check.canZip) {
+            alert(check.reason + '. Vui lòng tải từng tệp riêng lẻ.');
+            return;
+        }
+
+        setIsZipping(true);
+        setZipProgress(null);
+
+        try {
+            const filesToZip = downloadedFiles.map((f) => ({ name: f.name, blob: f.blob }));
+            const zipFilename = generateZipFilename(receiverFileId || undefined);
+            const zipBlob = await createZip(filesToZip, {
+                filename: zipFilename,
+                onProgress: (p) => setZipProgress(p),
+            });
+            downloadBlob(zipBlob, zipFilename);
+        } catch (err) {
+            console.error('Lỗi tạo ZIP:', err);
+            alert('Không thể tạo file ZIP: ' + (err instanceof Error ? err.message : 'Lỗi không xác định'));
+        } finally {
+            setIsZipping(false);
+            setZipProgress(null);
+        }
+    }, [downloadedFiles, receiverFileId]);
+
     // ---------------------------------------------------------------------------
     // Delete Stored File (by fileId)
     // ---------------------------------------------------------------------------
@@ -683,14 +717,22 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
 
                                 {downloadedFiles.length > 1 && (
                                     <Button
-                                        onClick={() => {
-                                            downloadedFiles.forEach((f) => downloadBlob(f.blob, f.name));
-                                        }}
+                                        onClick={handleZipAllFiles}
+                                        disabled={isZipping}
                                         variant="default"
-                                        className="w-full flex items-center justify-center gap-2"
+                                        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white"
                                     >
-                                        <Download className="w-4 h-4" />
-                                        Tải toàn bộ {downloadedFiles.length} file về máy
+                                        {isZipping ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                <span>Đang đóng gói ZIP ({zipProgress ? `${zipProgress.percent}%` : '...'})</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Archive className="w-4 h-4" />
+                                                <span>Tải toàn bộ {downloadedFiles.length} file (.zip)</span>
+                                            </>
+                                        )}
                                     </Button>
                                 )}
                             </div>
