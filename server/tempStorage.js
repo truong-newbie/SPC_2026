@@ -3,7 +3,7 @@
  * 
  * Manages encrypted ciphertext files (.enc) on server disk.
  * Server has NO access to file plaintext or encryption passwords.
- * Automatic TTL expiration and burn-after-reading support.
+ * Automatic TTL expiration, dynamic storage quota, and burn-after-reading support.
  */
 
 const fs = require('fs');
@@ -12,8 +12,11 @@ const path = require('path');
 const STORAGE_DIR = path.join(__dirname, 'data', 'temp_storage');
 const METADATA_FILE = path.join(STORAGE_DIR, 'metadata.json');
 
-// 500 MB max file size
+// 500 MB max single file size
 const MAX_FILE_SIZE = 500 * 1024 * 1024;
+
+// 15 GB max global storage ceiling across all temporary files
+const MAX_GLOBAL_STORAGE = parseInt(process.env.MAX_TEMP_STORAGE_BYTES || String(15 * 1024 * 1024 * 1024), 10);
 
 // Ensure storage directory exists
 if (!fs.existsSync(STORAGE_DIR)) {
@@ -61,6 +64,101 @@ function getCipherFilePath(fileId) {
 }
 
 /**
+ * Dynamic TTL Policy based on file size:
+ * - File nhỏ (< 20MB): Cho phép lưu tối đa 24 giờ
+ * - File trung bình (20MB - 100MB): Cho phép lưu tối đa 6 giờ
+ * - File lớn (> 100MB): Cho phép lưu tối đa 2 giờ (đủ thời gian người nhận tải, tiết kiệm ổ cứng)
+ */
+function getMaxAllowedTtlHours(fileSizeBytes) {
+    const MB = 1024 * 1024;
+    const size = Number(fileSizeBytes) || 0;
+    if (size > 100 * MB) {
+        return 2;
+    }
+    if (size > 20 * MB) {
+        return 6;
+    }
+    return 24;
+}
+
+/**
+ * Calculate total storage bytes currently used by active files
+ */
+function getTotalStorageUsed() {
+    let total = 0;
+    for (const record of storageMap.values()) {
+        total += (record.cipherSize || record.fileSize || 0);
+    }
+    return total;
+}
+
+/**
+ * Clean up untracked/orphan .enc files on disk
+ */
+function sweepOrphanFiles() {
+    try {
+        if (!fs.existsSync(STORAGE_DIR)) return;
+        const files = fs.readdirSync(STORAGE_DIR);
+        for (const file of files) {
+            if (file.endsWith('.enc')) {
+                const fileId = file.slice(0, -4);
+                if (!storageMap.has(fileId)) {
+                    try {
+                        fs.unlinkSync(path.join(STORAGE_DIR, file));
+                        console.log(`[TempStorage Sweeper] Cleaned orphan file: ${file}`);
+                    } catch (e) {
+                        // ignore unlink error
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.warn('[TempStorage Sweeper] Error sweeping orphan files:', err.message);
+    }
+}
+
+/**
+ * Check if the server can accept an upload of the given size.
+ * Automatically triggers cleanup of expired and orphan files first.
+ */
+function canAcceptUpload(incomingSizeBytes) {
+    // 1. Clean expired and orphan files to reclaim disk space
+    sweepExpiredFiles();
+    sweepOrphanFiles();
+
+    const incoming = Number(incomingSizeBytes) || 0;
+    const currentUsed = getTotalStorageUsed();
+
+    if (currentUsed + incoming > MAX_GLOBAL_STORAGE) {
+        return {
+            allowed: false,
+            currentUsed,
+            maxStorage: MAX_GLOBAL_STORAGE,
+            reason: 'Hệ thống lưu trữ tạm đang bận, vui lòng gửi qua chế độ Gửi trực tiếp 1-1 hoặc thử lại sau',
+        };
+    }
+
+    return {
+        allowed: true,
+        currentUsed,
+        maxStorage: MAX_GLOBAL_STORAGE,
+    };
+}
+
+/**
+ * Get current storage stats for monitoring
+ */
+function getStorageStats() {
+    const used = getTotalStorageUsed();
+    return {
+        usedBytes: used,
+        maxBytes: MAX_GLOBAL_STORAGE,
+        availableBytes: Math.max(0, MAX_GLOBAL_STORAGE - used),
+        activeFiles: storageMap.size,
+    };
+}
+
+/**
  * Store encrypted file metadata and write stream to disk
  */
 function createUploadStream(fileId, meta) {
@@ -68,10 +166,24 @@ function createUploadStream(fileId, meta) {
         throw new Error('File ID already exists in temporary storage');
     }
 
+    // 1. Global Quota check
+    const quotaCheck = canAcceptUpload(meta.fileSize || 0);
+    if (!quotaCheck.allowed) {
+        const err = new Error(quotaCheck.reason);
+        err.statusCode = 507;
+        err.code = 'QUOTA_EXCEEDED';
+        throw err;
+    }
+
+    // 2. Dynamic TTL calculation
+    const maxTtl = getMaxAllowedTtlHours(meta.fileSize || 0);
+    const requestedTtl = meta.ttlHours || maxTtl;
+    const effectiveTtlHours = Math.min(Math.max(1, requestedTtl), maxTtl);
+
     const filePath = getCipherFilePath(fileId);
     const writeStream = fs.createWriteStream(filePath);
 
-    const ttlMs = (meta.ttlHours || 24) * 3600 * 1000;
+    const ttlMs = effectiveTtlHours * 3600 * 1000;
     const now = Date.now();
 
     const record = {
@@ -93,7 +205,7 @@ function createUploadStream(fileId, meta) {
             record.cipherSize = stat.size;
             storageMap.set(fileId, record);
             persistMetadata();
-            console.log(`[TempStorage] Stored: ${fileId} (${record.fileName}, ${record.cipherSize} bytes, expires in ${meta.ttlHours || 24}h)`);
+            console.log(`[TempStorage] Stored: ${fileId} (${record.fileName}, ${record.cipherSize} bytes, expires in ${effectiveTtlHours}h, burnAfterReading=${record.maxDownloads === 1})`);
         } catch (err) {
             console.error('[TempStorage] Error finishing upload:', err);
         }
@@ -104,7 +216,7 @@ function createUploadStream(fileId, meta) {
         deleteStoredFile(fileId);
     });
 
-    return { writeStream, record };
+    return { writeStream, record, effectiveTtlHours };
 }
 
 /**
@@ -115,10 +227,22 @@ function saveEncryptedBuffer(fileId, buffer, meta) {
         throw new Error(`File size exceeds 500 MB limit (got ${buffer.length} bytes)`);
     }
 
+    const quotaCheck = canAcceptUpload(buffer.length);
+    if (!quotaCheck.allowed) {
+        const err = new Error(quotaCheck.reason);
+        err.statusCode = 507;
+        err.code = 'QUOTA_EXCEEDED';
+        throw err;
+    }
+
+    const maxTtl = getMaxAllowedTtlHours(buffer.length);
+    const requestedTtl = meta.ttlHours || maxTtl;
+    const effectiveTtlHours = Math.min(Math.max(1, requestedTtl), maxTtl);
+
     const filePath = getCipherFilePath(fileId);
     fs.writeFileSync(filePath, buffer);
 
-    const ttlMs = (meta.ttlHours || 24) * 3600 * 1000;
+    const ttlMs = effectiveTtlHours * 3600 * 1000;
     const now = Date.now();
 
     const record = {
@@ -136,7 +260,7 @@ function saveEncryptedBuffer(fileId, buffer, meta) {
 
     storageMap.set(fileId, record);
     persistMetadata();
-    console.log(`[TempStorage] Stored: ${fileId} (${record.fileName}, ${record.cipherSize} bytes, expires in ${meta.ttlHours || 24}h)`);
+    console.log(`[TempStorage] Stored: ${fileId} (${record.fileName}, ${record.cipherSize} bytes, expires in ${effectiveTtlHours}h)`);
     return record;
 }
 
@@ -191,11 +315,11 @@ function recordDownloadComplete(fileId) {
     record.downloadCount += 1;
 
     if (record.downloadCount >= record.maxDownloads) {
-        console.log(`[TempStorage] Burning file ${fileId} after reaching download limit (${record.maxDownloads})`);
-        // Delay deletion slightly so stream can finish flushing to client
+        console.log(`[TempStorage] Burning file ${fileId} immediately after download (${record.downloadCount}/${record.maxDownloads})`);
+        // Delay slightly (3s) so socket buffer finishes sending to client, then delete permanently
         setTimeout(() => {
             deleteStoredFile(fileId);
-        }, 5000);
+        }, 3000);
     } else {
         persistMetadata();
     }
@@ -238,11 +362,16 @@ function sweepExpiredFiles() {
     }
 }
 
-// Run sweeper every 2 minutes
-setInterval(sweepExpiredFiles, 2 * 60 * 1000).unref();
+// Run sweeper every 1 minute
+setInterval(sweepExpiredFiles, 60 * 1000).unref();
 
 module.exports = {
     MAX_FILE_SIZE,
+    MAX_GLOBAL_STORAGE,
+    getMaxAllowedTtlHours,
+    getTotalStorageUsed,
+    canAcceptUpload,
+    getStorageStats,
     createUploadStream,
     saveEncryptedBuffer,
     getFileMetadata,
@@ -250,4 +379,5 @@ module.exports = {
     recordDownloadComplete,
     deleteStoredFile,
     sweepExpiredFiles,
+    sweepOrphanFiles,
 };

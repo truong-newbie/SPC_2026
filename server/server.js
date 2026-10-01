@@ -455,15 +455,20 @@ app.post('/api/temp-storage/upload/:fileId', tempUploadLimiter, (req, res) => {
 
         const fileSize = parseInt(req.headers['x-file-size'] || '0', 10);
         const rawTtl = parseInt(req.headers['x-ttl-hours'] || '24', 10);
-        const ttlHours = Math.min(Math.max(isNaN(rawTtl) ? 24 : rawTtl, 1), 72);
         const burnAfterReading = req.headers['x-burn-after-reading'] === 'true' || req.headers['x-burn-after-reading'] === '1';
         const salt = String(req.headers['x-salt'] || '');
         const iv = String(req.headers['x-iv'] || '');
 
-        const { writeStream, record } = tempStorage.createUploadStream(fileId, {
+        // Global Storage Quota Check
+        const quotaCheck = tempStorage.canAcceptUpload(fileSize);
+        if (!quotaCheck.allowed) {
+            return res.status(507).json({ error: quotaCheck.reason });
+        }
+
+        const { writeStream, record, effectiveTtlHours } = tempStorage.createUploadStream(fileId, {
             fileName,
             fileSize,
-            ttlHours,
+            ttlHours: rawTtl,
             burnAfterReading,
             salt,
             iv,
@@ -482,6 +487,17 @@ app.post('/api/temp-storage/upload/:fileId', tempUploadLimiter, (req, res) => {
                 if (!res.headersSent) {
                     res.status(413).json({ error: 'Dung lượng file vượt quá giới hạn 500 MB' });
                 }
+                return;
+            }
+            if (tempStorage.getTotalStorageUsed() + chunk.length > tempStorage.MAX_GLOBAL_STORAGE) {
+                aborted = true;
+                req.destroy();
+                writeStream.destroy();
+                tempStorage.deleteStoredFile(fileId);
+                if (!res.headersSent) {
+                    res.status(507).json({ error: 'Hệ thống lưu trữ tạm đang bận, vui lòng gửi qua chế độ Gửi trực tiếp 1-1 hoặc thử lại sau' });
+                }
+                return;
             }
         });
 
@@ -510,6 +526,7 @@ app.post('/api/temp-storage/upload/:fileId', tempUploadLimiter, (req, res) => {
                 fileName: record.fileName,
                 cipherSize: record.cipherSize,
                 expiresAt: record.expiresAt,
+                effectiveTtlHours,
                 burnAfterReading: record.maxDownloads === 1,
             });
         });
@@ -522,8 +539,14 @@ app.post('/api/temp-storage/upload/:fileId', tempUploadLimiter, (req, res) => {
 
         req.pipe(writeStream);
     } catch (err) {
-        res.status(400).json({ error: err.message });
+        const status = err.statusCode || (err.code === 'QUOTA_EXCEEDED' ? 507 : 400);
+        res.status(status).json({ error: err.message });
     }
+});
+
+// GET /api/temp-storage/stats - Storage usage stats
+app.get('/api/temp-storage/stats', (_req, res) => {
+    res.json(tempStorage.getStorageStats());
 });
 
 // GET /api/temp-storage/meta/:fileId - Retrieve metadata for preview

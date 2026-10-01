@@ -98,7 +98,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
     const [isDragging, setIsDragging] = useState(false);
     const [ttlHours, setTtlHours] = useState<number>(24);
-    const [burnAfterReading, setBurnAfterReading] = useState<boolean>(false);
+    const [burnAfterReading, setBurnAfterReading] = useState<boolean>(true);
     const [senderPassword, setSenderPassword] = useState<string>('');
     const [showSenderPassword, setShowSenderPassword] = useState(false);
 
@@ -224,6 +224,44 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     };
 
     const totalSelectedBytes = selectedFiles.reduce((acc, f) => acc + f.size, 0);
+
+    // Dynamic TTL options based on file size:
+    // - File nhỏ (< 20MB): Tối đa 24 giờ
+    // - File trung bình (20MB - 100MB): Tối đa 6 giờ
+    // - File lớn (> 100MB): Tối đa 2 giờ (đủ người nhận tải, bảo vệ ổ cứng server)
+    const MB = 1024 * 1024;
+    let maxAllowedTtlHours = 24;
+    let ttlOptions = [
+        { hours: 1, label: '1 giờ' },
+        { hours: 6, label: '6 giờ' },
+        { hours: 12, label: '12 giờ' },
+        { hours: 24, label: '24 giờ (mặc định)' },
+    ];
+    let ttlHint = 'Tệp nhỏ (< 20MB): Cho phép lưu tối đa 24 giờ';
+
+    if (totalSelectedBytes > 100 * MB) {
+        maxAllowedTtlHours = 2;
+        ttlOptions = [
+            { hours: 1, label: '1 giờ' },
+            { hours: 2, label: '2 giờ (Tối đa)' },
+        ];
+        ttlHint = 'Tệp lớn (> 100MB): Tối đa 2 giờ';
+    } else if (totalSelectedBytes > 20 * MB) {
+        maxAllowedTtlHours = 6;
+        ttlOptions = [
+            { hours: 1, label: '1 giờ' },
+            { hours: 4, label: '4 giờ' },
+            { hours: 6, label: '6 giờ (Tối đa)' },
+        ];
+        ttlHint = 'Tệp trung bình (20MB - 100MB): Tối đa 6 giờ';
+    }
+
+    // Auto-adjust ttlHours if current selection exceeds dynamic limit
+    useEffect(() => {
+        if (ttlHours > maxAllowedTtlHours) {
+            setTtlHours(maxAllowedTtlHours);
+        }
+    }, [maxAllowedTtlHours, ttlHours]);
 
     // ---------------------------------------------------------------------------
     // Sender: Encrypt & Upload
@@ -965,19 +1003,19 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
 
                     {/* Options Grid */}
                     <div className="space-y-4 pt-2 border-t">
-                        {/* Expiration (TTL) */}
+                        {/* Expiration (TTL) with Dynamic Limits */}
                         <div className="space-y-2">
-                            <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                                <Clock className="w-3.5 h-3.5 text-primary" />
-                                Thời gian lưu tạm trên server (Tự hủy sau):
-                            </label>
+                            <div className="flex items-center justify-between flex-wrap gap-1">
+                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                                    <Clock className="w-3.5 h-3.5 text-primary" />
+                                    Thời gian lưu tạm trên server:
+                                </label>
+                                <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded font-medium">
+                                    {ttlHint}
+                                </span>
+                            </div>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {[
-                                    { hours: 1, label: '1 giờ' },
-                                    { hours: 6, label: '6 giờ' },
-                                    { hours: 12, label: '12 giờ' },
-                                    { hours: 24, label: '24 giờ (mặc định)' },
-                                ].map((item) => (
+                                {ttlOptions.map((item) => (
                                     <button
                                         key={item.hours}
                                         type="button"
@@ -994,8 +1032,8 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             </div>
                         </div>
 
-                        {/* Burn After Reading Checkbox */}
-                        <div className="p-3 rounded-xl border bg-muted/20 flex items-start gap-3">
+                        {/* Burn After Reading Checkbox (Recommended, default ON) */}
+                        <div className="p-3 rounded-xl border bg-emerald-500/5 border-emerald-500/20 flex items-start gap-3">
                             <input
                                 id="burn-toggle"
                                 type="checkbox"
@@ -1006,10 +1044,11 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             <label htmlFor="burn-toggle" className="text-xs space-y-0.5 cursor-pointer">
                                 <div className="font-semibold text-foreground flex items-center gap-1.5">
                                     <Flame className="w-3.5 h-3.5 text-rose-500" />
-                                    Tự hủy ngay sau 1 lần tải thành công (Burn after reading)
+                                    <span>Tự hủy ngay sau 1 lần tải thành công (Burn after reading)</span>
+                                    <span className="text-[10px] bg-rose-500/10 text-rose-600 px-1.5 py-0.5 rounded font-medium">Mặc định bật</span>
                                 </div>
                                 <div className="text-muted-foreground">
-                                    Khi bật tùy chọn này, server sẽ tự động xóa file vĩnh viễn ngay khi người nhận tải xong lần đầu tiên.
+                                    Server tự động xóa sạch file vĩnh viễn ngay khi người nhận tải xong 100%, bảo vệ tuyệt đối quyền riêng tư và giải phóng ổ cứng.
                                 </div>
                             </label>
                         </div>
