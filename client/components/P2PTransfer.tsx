@@ -43,6 +43,7 @@ import {
     Share2,
     Zap,
     Shield,
+    X,
 } from 'lucide-react';
 
 interface P2PTransferProps {
@@ -93,7 +94,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             const speedLabel = transferSpeed ? ` (${transferSpeed})` : '';
             document.title = `[${Math.round(progress)}%] Đang truyền${fileLabel}${speedLabel} — FileBridge`;
         } else if (progress === 100) {
-            document.title = `(✓ Hoàn thành) Đã truyền tệp xong — FileBridge`;
+            document.title = `[Hoàn thành] Đã truyền tệp xong — FileBridge`;
         } else {
             document.title = 'FileBridge — Truyền tệp P2P & Lưu trữ E2EE Zero-Knowledge (SPC 2026)';
         }
@@ -575,7 +576,9 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             {error && (
                 <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium flex items-center justify-between">
                     <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2">✕</button>
+                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2 p-1 rounded-md hover:bg-red-100 transition-colors" title="Đóng">
+                        <X className="w-4 h-4" />
+                    </button>
                 </div>
             )}
 

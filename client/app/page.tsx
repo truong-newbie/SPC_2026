@@ -3,6 +3,17 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { PWAInstallButton } from '@/components/PWAInstallButton';
+import {
+    Zap,
+    Users,
+    Lock,
+    Sparkles,
+    Check,
+    X,
+    ShieldCheck,
+    Globe,
+    ChevronDown,
+} from 'lucide-react';
 
 // Dynamic import of transfer components to avoid SSR WebRTC issues
 const P2PTransfer = dynamic(() => import('@/components/P2PTransfer'), {
@@ -142,7 +153,7 @@ export default function Home() {
                             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-400 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-xs whitespace-nowrap"
                             title={isVi ? 'Chuyển sang Tiếng Anh' : 'Switch to Vietnamese'}
                         >
-                            <span>{isVi ? '🇻🇳' : '🇬🇧'}</span>
+                            <Globe className="w-3.5 h-3.5 text-slate-500" />
                             <span>{isVi ? 'VIE' : 'ENG'}</span>
                         </button>
                     </div>
@@ -156,7 +167,7 @@ export default function Home() {
                 {/* Hero Header */}
                 <section className="text-center space-y-3 max-w-2xl mx-auto">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/80 shadow-xs">
-                        <span className="text-blue-500">✨</span>
+                        <Sparkles className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                         <span>
                             {isVi
                                 ? 'Truyền tệp trực tiếp qua WebRTC • Không qua máy chủ'
@@ -189,33 +200,36 @@ export default function Home() {
                         <div className="flex items-center gap-1.5 bg-slate-100/80 p-1.5 rounded-2xl text-xs w-full sm:w-auto overflow-x-auto">
                             <button
                                 onClick={() => setTransferMode('p2p')}
-                                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                                     transferMode === 'p2p'
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
-                                ⚡ {isVi ? '1-1 Trực tiếp (P2P)' : '1-to-1 Direct (P2P)'}
+                                <Zap className="w-3.5 h-3.5 text-amber-500" />
+                                <span>{isVi ? '1-1 Trực tiếp (P2P)' : '1-to-1 Direct (P2P)'}</span>
                             </button>
                             <button
                                 onClick={() => setTransferMode('swarm')}
-                                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                                     transferMode === 'swarm'
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
-                                👥 {isVi ? 'Nhóm (Swarm P2P)' : 'Swarm Sharing'}
+                                <Users className="w-3.5 h-3.5 text-blue-600" />
+                                <span>{isVi ? 'Nhóm (Swarm P2P)' : 'Swarm Sharing'}</span>
                             </button>
                             <button
                                 onClick={() => setTransferMode('stored')}
-                                className={`flex-1 sm:flex-initial px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                                className={`flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
                                     transferMode === 'stored'
                                         ? 'bg-white text-blue-600 shadow-sm'
                                         : 'text-slate-600 hover:text-slate-900'
                                 }`}
                             >
-                                🔒 {isVi ? 'Lưu tạm E2EE (500MB)' : 'Stored E2EE (500MB)'}
+                                <Lock className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>{isVi ? 'Lưu tạm E2EE (500MB)' : 'Stored E2EE (500MB)'}</span>
                             </button>
                         </div>
 
@@ -231,8 +245,14 @@ export default function Home() {
                     {/* Mode Info Banner */}
                     <div className="flex items-center justify-between px-4 py-3 rounded-2xl bg-blue-50/70 border border-blue-100 text-xs transition-colors">
                         <div className="flex items-center gap-2.5 text-blue-900 font-medium">
-                            <span className="text-base">
-                                {transferMode === 'p2p' ? '⚡' : transferMode === 'swarm' ? '👥' : '🔒'}
+                            <span className="p-1 rounded-lg bg-blue-100/80 text-blue-700 shrink-0">
+                                {transferMode === 'p2p' ? (
+                                    <Zap className="w-4 h-4 text-amber-600" />
+                                ) : transferMode === 'swarm' ? (
+                                    <Users className="w-4 h-4 text-blue-600" />
+                                ) : (
+                                    <Lock className="w-4 h-4 text-indigo-600" />
+                                )}
                             </span>
                             <span>
                                 {transferMode === 'p2p'
@@ -264,20 +284,20 @@ export default function Home() {
                     {/* 3 Trust Badges */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-5 border-t border-slate-100 text-xs text-slate-500 font-medium">
                         <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center text-xs font-bold">
-                                ✓
+                            <span className="w-6 h-6 rounded-full bg-cyan-100 text-cyan-700 flex items-center justify-center">
+                                <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                             </span>
                             <span>{isVi ? '100% Không cần tài khoản' : '100% No Account Needed'}</span>
                         </div>
                         <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-xs">
-                                🔒
+                            <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                                <ShieldCheck className="w-3.5 h-3.5" />
                             </span>
                             <span>{isVi ? 'Mã hóa WebCrypto E2EE' : 'WebCrypto E2EE Encryption'}</span>
                         </div>
                         <div className="flex items-center gap-2.5">
-                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs">
-                                ⚡
+                            <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center">
+                                <Zap className="w-3.5 h-3.5" />
                             </span>
                             <span>{isVi ? 'Tốc độ tối đa đường truyền' : 'Full Line Connection Speed'}</span>
                         </div>
@@ -358,8 +378,8 @@ export default function Home() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="bg-emerald-50/50 p-6 rounded-3xl border border-emerald-200 space-y-3.5 shadow-soft">
                             <div className="text-xs font-mono font-bold text-emerald-800 flex items-center gap-2 uppercase tracking-wider">
-                                <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center text-xs">
-                                    ✓
+                                <span className="w-5 h-5 rounded-full bg-emerald-200 text-emerald-800 flex items-center justify-center">
+                                    <Check className="w-3 h-3 stroke-[2.5]" />
                                 </span>
                                 <span>{isVi ? 'NHỮNG GÌ MÁY CHỦ BIẾT (TỐI THIỂU)' : 'WHAT THE SERVER KNOWS (MINIMAL)'}</span>
                             </div>
@@ -384,8 +404,8 @@ export default function Home() {
 
                         <div className="bg-blue-50/50 p-6 rounded-3xl border border-blue-200 space-y-3.5 shadow-soft">
                             <div className="text-xs font-mono font-bold text-blue-800 flex items-center gap-2 uppercase tracking-wider">
-                                <span className="w-5 h-5 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-xs">
-                                    ✕
+                                <span className="w-5 h-5 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center">
+                                    <X className="w-3 h-3 stroke-[2.5]" />
                                 </span>
                                 <span>{isVi ? 'NHỮNG GÌ MÁY CHỦ KHÔNG THỂ BIẾT' : 'WHAT THE SERVER CANNOT KNOW'}</span>
                             </div>
@@ -474,17 +494,11 @@ export default function Home() {
                                         ? '1. Kích thước tệp tối đa tôi có thể gửi là bao nhiêu?'
                                         : '1. What is the maximum file size I can transfer?'}
                                 </span>
-                                <svg
+                                <ChevronDown
                                     className={`w-4 h-4 text-slate-400 transition-transform ${
                                         faqOpen[1] ? 'rotate-180' : ''
                                     }`}
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                >
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
+                                />
                             </button>
                             {faqOpen[1] && (
                                 <div className="px-5 pb-5 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
@@ -506,17 +520,11 @@ export default function Home() {
                                         ? '2. Tập tin có bị nén hay giảm độ phân giải không?'
                                         : '2. Are my files compressed or resized?'}
                                 </span>
-                                <svg
+                                <ChevronDown
                                     className={`w-4 h-4 text-slate-400 transition-transform ${
                                         faqOpen[2] ? 'rotate-180' : ''
                                     }`}
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                >
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
+                                />
                             </button>
                             {faqOpen[2] && (
                                 <div className="px-5 pb-5 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
@@ -538,17 +546,11 @@ export default function Home() {
                                         ? '3. Hai người ở hai mạng khác nhau (Wi-Fi và 4G) có gửi được không?'
                                         : '3. Can two users on different networks (e.g. Wi-Fi & 4G) connect?'}
                                 </span>
-                                <svg
+                                <ChevronDown
                                     className={`w-4 h-4 text-slate-400 transition-transform ${
                                         faqOpen[3] ? 'rotate-180' : ''
                                     }`}
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                >
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
+                                />
                             </button>
                             {faqOpen[3] && (
                                 <div className="px-5 pb-5 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
@@ -570,17 +572,11 @@ export default function Home() {
                                         ? '4. Tính năng "Tự hủy sau 1 lần tải" hoạt động ra sao?'
                                         : '4. How does "Burn after reading" work?'}
                                 </span>
-                                <svg
+                                <ChevronDown
                                     className={`w-4 h-4 text-slate-400 transition-transform ${
                                         faqOpen[4] ? 'rotate-180' : ''
                                     }`}
-                                    viewBox="0 0 24 24"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    strokeWidth="2.5"
-                                >
-                                    <polyline points="6 9 12 15 18 9" />
-                                </svg>
+                                />
                             </button>
                             {faqOpen[4] && (
                                 <div className="px-5 pb-5 text-xs sm:text-sm text-slate-600 leading-relaxed border-t border-slate-100 pt-3">
