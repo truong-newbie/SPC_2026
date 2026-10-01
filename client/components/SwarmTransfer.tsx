@@ -8,6 +8,7 @@ import { formatBytes } from '@/lib/download';
 import { fetchIceServers } from '@/lib/relay';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
+import { FileIcon } from './FileIcon';
 import {
     Upload,
     Download,
@@ -676,7 +677,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                         className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 hover:bg-gray-100 transition-colors"
                                     >
                                         <div className="flex items-center gap-3 min-w-0 flex-1">
-                                            <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                                            <FileIcon fileName={file.name} size="sm" />
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-sm font-semibold text-gray-900 truncate">{file.name}</p>
                                                 <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
@@ -909,7 +910,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                         onClick={(e) => e.stopPropagation()}
                                     >
                                         <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                            <FileText className="w-4 h-4 text-blue-500 shrink-0" />
+                                            <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
                                             <div className="min-w-0 flex-1">
                                                 <p className="text-xs font-semibold text-gray-900 truncate">{file.name}</p>
                                                 <p className="text-[11px] text-gray-500">{formatBytes(file.size)}</p>

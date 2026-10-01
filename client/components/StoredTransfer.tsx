@@ -28,6 +28,7 @@ import {
     Key,
 } from 'lucide-react';
 import { Button } from './Button';
+import { FileIcon } from './FileIcon';
 import { ProgressBar } from './ProgressBar';
 import { formatBytes, downloadBlob } from '@/lib/download';
 import { packFiles, unpackFiles, type UnpackedFile } from '@/lib/swarm/pack';
@@ -656,7 +657,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                                 className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors"
                                             >
                                                 <div className="flex items-center gap-3 min-w-0 pr-4">
-                                                    <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                                                    <FileIcon fileName={file.name} mimeType={file.blob?.type} size="sm" />
                                                     <div className="min-w-0">
                                                         <div className="text-sm font-medium truncate">
                                                             {file.name}
@@ -902,7 +903,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                         className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/30 transition-colors"
                                     >
                                         <div className="flex items-center gap-2 min-w-0 pr-2">
-                                            <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                                            <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
                                             <span className="font-medium truncate">{file.name}</span>
                                             <span className="text-muted-foreground shrink-0">
                                                 ({formatBytes(file.size)})

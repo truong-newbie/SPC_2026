@@ -27,6 +27,7 @@ import { SpeedWaveform } from './SpeedWaveform';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileCard } from './FileCard';
+import { FileIcon } from './FileIcon';
 import {
     Download,
     Upload,
@@ -803,9 +804,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 {receivedFiles.map((f) => (
                                     <div key={f.id} className="bg-slate-50/80 border border-slate-200 rounded-xl p-3.5 space-y-2.5 transition-all hover:bg-slate-50">
                                         <div className="flex items-center justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="truncate text-sm font-semibold text-slate-800">{f.fileName}</p>
-                                                <p className="text-xs text-slate-500">{formatBytes(f.fileSize)}</p>
+                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <FileIcon fileName={f.fileName} mimeType={f.blob?.type} size="md" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="truncate text-sm font-semibold text-slate-800">{f.fileName}</p>
+                                                    <p className="text-xs text-slate-500 font-medium">{formatBytes(f.fileSize)}</p>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">
                                                 <Button
