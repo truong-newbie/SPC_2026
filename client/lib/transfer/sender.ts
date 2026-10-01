@@ -19,6 +19,7 @@ import {
     MIN_PROTOCOL_VERSION,
     ACK_TIMEOUT_MS,
     type Ack,
+    type EndAck,
     type Incompatible,
 } from './protocol';
 import { computeSHA256 } from '@/lib/crypto/checksum';
@@ -325,11 +326,66 @@ async function sendSingleFile(
         }
     }
 
+    // Drain remaining buffer to wire before sending end control message
+    await drainBelow(channel, 0, destroyed);
+    if (destroyed()) return true;
+
     try {
-        send(endMessage());
-    } catch { }
+        send(endMessage(id));
+    } catch {
+        return false;
+    }
+
+    // Wait for receiver to acknowledge complete reception and verification of this file
+    const endAckOk = await waitForEndAck(onData, id, destroyed);
+    view.active = false;
+    if (destroyed()) return true;
+    if (!endAckOk) return false;
 
     return true;
+}
+
+function waitForEndAck(
+    onData: (handler: (data: string | Uint8Array | ArrayBuffer) => void) => () => void,
+    fileId: string,
+    destroyed: () => boolean,
+    timeoutMs: number = 15000
+): Promise<boolean> {
+    if (destroyed()) return Promise.resolve(false);
+    let off: (() => void) | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+        off?.();
+        off = null;
+        if (timer) clearTimeout(timer);
+        timer = null;
+    };
+
+    return new Promise<boolean>((resolve) => {
+        off = onData((raw) => {
+            if (destroyed()) {
+                cleanup();
+                resolve(false);
+                return;
+            }
+            const msg = classifyControl(raw);
+            if (!msg) return;
+            if (msg.type === 'end_ack' && (msg as EndAck).id === fileId) {
+                cleanup();
+                resolve(true);
+            } else if (msg.type === 'incompatible') {
+                cleanup();
+                resolve(false);
+            }
+        });
+
+        timer = setTimeout(() => {
+            cleanup();
+            // Fallback for older receivers that do not reply with end_ack
+            resolve(true);
+        }, timeoutMs);
+    });
 }
 
 function waitForAck(

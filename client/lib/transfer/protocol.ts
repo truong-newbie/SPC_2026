@@ -47,6 +47,13 @@ export interface Ack {
 
 export interface End {
     type: 'end';
+    id?: string;
+}
+
+export interface EndAck {
+    type: 'end_ack';
+    id: string;
+    verified?: boolean;
 }
 
 export interface Incompatible {
@@ -57,7 +64,7 @@ export interface Incompatible {
     ver?: string;
 }
 
-export type ControlMessage = Metadata | Ack | End | Incompatible;
+export type ControlMessage = Metadata | Ack | End | EndAck | Incompatible;
 
 // --- Message Builders ---
 
@@ -100,8 +107,12 @@ export function ackMessage(id: string, offset: number, ver?: string): string {
     } satisfies Ack);
 }
 
-export function endMessage(): string {
-    return JSON.stringify({ type: 'end' } satisfies End);
+export function endMessage(id?: string): string {
+    return JSON.stringify({ type: 'end', id } satisfies End);
+}
+
+export function endAckMessage(id: string, verified?: boolean): string {
+    return JSON.stringify({ type: 'end_ack', id, verified } satisfies EndAck);
 }
 
 export function incompatibleMessage(reason: string): string {
@@ -209,6 +220,7 @@ export function classifyControl(data: string | ArrayBuffer | Uint8Array): Contro
     if (t === 'metadata') return msg as unknown as Metadata;
     if (t === 'ack') return msg as unknown as Ack;
     if (t === 'end') return msg as unknown as End;
+    if (t === 'end_ack') return msg as unknown as EndAck;
     if (t === 'incompatible') return msg as unknown as Incompatible;
     return null;
 }

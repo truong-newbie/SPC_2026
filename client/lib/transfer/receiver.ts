@@ -9,6 +9,7 @@ import {
     isAbortReason,
     CONTROL_MSG_MAX,
     ackMessage,
+    endAckMessage,
     incompatibleMessage,
     checkCompat,
     compatErrorMessage,
@@ -18,6 +19,8 @@ import {
     normalizeFileSize,
     sanitizeDisplayText,
     type Metadata,
+    type End,
+    type EndAck,
     type Incompatible,
 } from './protocol';
 import { computeSHA256 } from '@/lib/crypto/checksum';
@@ -63,10 +66,22 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
     let receiveSpeedBytes = 0;
     let lastReceiveSpeedUpdate = 0;
 
-    async function handleMessage(data: string | Uint8Array | ArrayBuffer): Promise<void> {
+    // Sequential Promise Queue ensures async operations (e.g. SHA-256 calculation)
+    // finish before subsequent messages (like next file metadata) are processed
+    let messageQueue: Promise<void> = Promise.resolve();
+
+    function handleMessage(data: string | Uint8Array | ArrayBuffer): void {
+        messageQueue = messageQueue
+            .then(() => processMessage(data))
+            .catch((err) => {
+                console.error('Error handling receiver message:', err);
+            });
+    }
+
+    async function processMessage(data: string | Uint8Array | ArrayBuffer): Promise<void> {
         if (aborted) return;
 
-        // Control message (metadata, ack, end, incompatible)
+        // Control message (metadata, ack, end, incompatible, end_ack)
         const msg = classifyControl(data);
         if (msg) {
             if (msg.type === 'metadata') {
@@ -129,17 +144,26 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
                 );
                 return;
             } else if (msg.type === 'end') {
-                if (!currentMetadata) return;
-                const fileData = partialDownloads.get(currentMetadata.id);
+                const endMsg = msg as End;
+                const targetId = endMsg.id || currentMetadata?.id;
+                if (!targetId) return;
+
+                // Scope metadata strictly to the file being completed
+                const targetMeta = (currentMetadata && (!endMsg.id || currentMetadata.id === endMsg.id))
+                    ? currentMetadata
+                    : null;
+                if (!targetMeta) return;
+
+                const fileData = partialDownloads.get(targetMeta.id);
                 if (!fileData) return;
 
-                // Integrity check
+                // Integrity check on byte count
                 if (expectedSize !== null && fileData.received !== expectedSize) {
-                    const name = sanitizeDisplayText(currentMetadata.fileName);
+                    const name = sanitizeDisplayText(targetMeta.fileName);
                     const got = fileData.received;
                     const want = expectedSize;
                     const detail = `Incomplete file "${name}": received ${got} of ${want} bytes`;
-                    partialDownloads.delete(currentMetadata.id);
+                    partialDownloads.delete(targetMeta.id);
                     currentMetadata = null;
                     expectedSize = null;
                     aborted = true;
@@ -166,38 +190,48 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
                 let calculatedChecksum: string | undefined;
                 let checksumVerified: boolean | undefined;
 
-                if (currentMetadata.checksum) {
+                if (targetMeta.checksum) {
                     try {
                         calculatedChecksum = await computeSHA256(blob);
-                        checksumVerified = calculatedChecksum.toLowerCase() === currentMetadata.checksum.toLowerCase();
+                        checksumVerified = calculatedChecksum.toLowerCase() === targetMeta.checksum.toLowerCase();
                     } catch {
                         // ignore
                     }
                 }
 
                 const completed: ReceivedFile = {
-                    id: currentMetadata.id,
-                    fileName: currentMetadata.fileName,
+                    id: targetMeta.id,
+                    fileName: targetMeta.fileName,
                     fileSize: fileData.received,
                     blob,
-                    checksum: calculatedChecksum || currentMetadata.checksum,
+                    checksum: calculatedChecksum || targetMeta.checksum,
                     checksumVerified,
                 };
 
-                partialDownloads.delete(currentMetadata.id);
-                cb.onFileComplete?.(completed, currentMetadata.index, currentMetadata.total);
+                partialDownloads.delete(targetMeta.id);
+                cb.onFileComplete?.(completed, targetMeta.index, targetMeta.total);
 
                 sessionBytes += fileData.received;
-                if (currentMetadata.index === currentMetadata.total) {
-                    cb.onAllComplete?.(sessionBytes, currentMetadata.total);
+                if (targetMeta.index === targetMeta.total) {
+                    cb.onAllComplete?.(sessionBytes, targetMeta.total);
                     sessionBytes = 0;
                 }
 
-                currentMetadata = null;
-                expectedSize = null;
+                if (currentMetadata?.id === targetMeta.id) {
+                    currentMetadata = null;
+                    expectedSize = null;
+                }
+
                 cb.onWaiting?.();
                 cb.onProgress?.(0, 0, 0);
                 cb.onSpeedReset?.();
+
+                // Send end_ack to sender confirming completion and verification
+                try {
+                    cb.send(endAckMessage(targetMeta.id, checksumVerified));
+                } catch { }
+            } else if (msg.type === 'end_ack') {
+                return;
             }
             return;
         }
