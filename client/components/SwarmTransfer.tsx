@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { SwarmManager, packFiles, unpackFiles, DEFAULT_PIECE_SIZE, type UnpackedFile, type PackedFileInfo } from '@/lib/swarm';
 import { formatBytes } from '@/lib/download';
 import { fetchIceServers } from '@/lib/relay';
+import { createZip, downloadBlob, generateZipFilename, formatSize, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
 import { Button } from './Button';
 import { ProgressBar } from './ProgressBar';
 import { FileIcon } from './FileIcon';
@@ -28,6 +29,7 @@ import {
     Trash2,
     Files,
     Eye,
+    Archive,
 } from 'lucide-react';
 
 interface SwarmTransferProps {
@@ -77,6 +79,10 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const [isCopied, setIsCopied] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [iceServers, setIceServers] = useState<RTCIceServer[]>([]);
+
+    // ZIP state
+    const [isZipping, setIsZipping] = useState(false);
+    const [zipProgress, setZipProgress] = useState<ZipProgress | null>(null);
 
     // Refs
     const socketRef = useRef<Socket | null>(null);
@@ -514,6 +520,43 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         });
     }, [unpackedFiles, handleSaveFile]);
 
+    // ZIP all files into one archive
+    const handleZipAllFiles = useCallback(async () => {
+        if (unpackedFiles.length === 0) return;
+
+        const totalBytes = unpackedFiles.reduce((sum, f) => sum + f.size, 0);
+        const check = shouldZipAll(totalBytes);
+
+        if (!check.canZip) {
+            setError(check.reason + '. ' + (check.recommended || ''));
+            return;
+        }
+
+        setIsZipping(true);
+        setError('');
+        setZipProgress(null);
+
+        try {
+            const files = unpackedFiles.map(f => ({ name: f.name, blob: f.blob }));
+            const zipFilename = generateZipFilename();
+
+            const zipBlob = await createZip(files, {
+                filename: zipFilename,
+                onProgress: (progress) => {
+                    setZipProgress(progress);
+                },
+            });
+
+            downloadBlob(zipBlob, zipFilename);
+        } catch (err) {
+            console.error('ZIP error:', err);
+            setError('Failed to create ZIP: ' + (err instanceof Error ? err.message : 'Unknown error'));
+        } finally {
+            setIsZipping(false);
+            setZipProgress(null);
+        }
+    }, [unpackedFiles]);
+
     // Copy share link
     const copyShareLink = useCallback(() => {
         const fullLink = shareLink + (password ? `#${password}` : '');
@@ -654,18 +697,33 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     {unpackedFiles.length > 0 && (
                         <div className="space-y-3 pt-3 border-t border-gray-200">
                             <div className="flex items-center justify-between">
-                                <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
-                                    <Files className="w-4 h-4 text-blue-600" />
-                                    Received Files ({unpackedFiles.length}):
-                                </h4>
-                                {unpackedFiles.length > 1 && (
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                        <Files className="w-4 h-4 text-blue-600" />
+                                        Received Files ({unpackedFiles.length}):
+                                    </h4>
+                                    <span className="text-xs text-gray-500">
+                                        ({formatSize(unpackedFiles.reduce((sum, f) => sum + f.size, 0))})
+                                    </span>
+                                </div>
+                                {unpackedFiles.length >= 2 && (
                                     <Button
-                                        onClick={handleSaveAllFiles}
+                                        onClick={handleZipAllFiles}
+                                        disabled={isZipping}
                                         size="sm"
-                                        className="bg-green-600 hover:bg-green-700 text-white text-xs px-3"
+                                        className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3"
                                     >
-                                        <ArrowDownToLine className="w-3.5 h-3.5 mr-1" />
-                                        Save All Files
+                                        {isZipping ? (
+                                            <>
+                                                <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                                                {zipProgress ? `${zipProgress.percent}%` : 'Zipping...'}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Archive className="w-3.5 h-3.5 mr-1" />
+                                                ZIP All ({formatSize(unpackedFiles.reduce((sum, f) => sum + f.size, 0))})
+                                            </>
+                                        )}
                                     </Button>
                                 )}
                             </div>
