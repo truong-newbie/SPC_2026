@@ -45,6 +45,8 @@ import {
     Zap,
     Shield,
     X,
+    Plus,
+    RotateCcw,
 } from 'lucide-react';
 
 interface P2PTransferProps {
@@ -122,9 +124,91 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     const hasJoinedRef = useRef(false);
     const joinedRoomRef = useRef<string | null>(null);
     const createdRoomRef = useRef<string | null>(null);
+    const isSendingRef = useRef(false);
+    const sentFileIdsRef = useRef<Set<string>>(new Set());
+    const [isSending, setIsSending] = useState(false);
 
-    // Keep refs in sync
-    useEffect(() => { filesRef.current = files; }, [files]);
+    // Send any pending/newly added files over WebRTC DataChannel
+    const sendPendingFiles = useCallback(() => {
+        if (!peerRef.current || peerRef.current.destroyed || isSendingRef.current) return;
+        const peerInstance = peerRef.current;
+        const channel = (peerInstance as any)._channel as RTCDataChannel | undefined;
+        if (!channel || channel.readyState !== 'open') return;
+
+        const currentFiles = filesRef.current;
+        const pending = currentFiles.filter((f) => !sentFileIdsRef.current.has(f.id));
+        if (pending.length === 0) return;
+
+        isSendingRef.current = true;
+        setIsSending(true);
+        setStatus(`Đang gửi ${pending.length} tệp qua P2P...`);
+
+        sendFiles(
+            {
+                send: (d: string | Uint8Array) => peerInstance.send(d),
+                onData: (h: (data: string | Uint8Array | ArrayBuffer) => void) => {
+                    peerInstance.on('data', h);
+                    return () => peerInstance.off('data', h);
+                },
+                channel: channel as any,
+            },
+            pending.map((f) => ({ id: f.id, file: f.file })),
+            {
+                onFileStart: (index, total, fileName) => {
+                    setStatus(`Đang gửi tệp ${index + 1}/${total}: ${fileName}`);
+                    setCurrentFileName(fileName);
+                    setProgress(0);
+                },
+                onProgress: (percent) => setProgress(percent),
+                onSpeed: (bps, eta) => {
+                    setCurrentBps(bps);
+                    setTransferSpeed(formatSpeed(bps));
+                    setEstimatedTime(formatETA(eta));
+                },
+                onSpeedReset: () => {
+                    setCurrentBps(0);
+                    setTransferSpeed('');
+                    setEstimatedTime('');
+                },
+                onAllSent: () => {
+                    pending.forEach((f) => sentFileIdsRef.current.add(f.id));
+                    isSendingRef.current = false;
+                    setIsSending(false);
+                    setProgress(100);
+                    setStatus('Đã gửi toàn bộ tệp thành công!');
+                    soundManager.playSuccess();
+                    sendTransferNotification(
+                        'Đã gửi tệp thành công!',
+                        'Tất cả tệp đã được chuyển an toàn qua WebRTC P2P.'
+                    );
+                    setTimeout(() => {
+                        const remaining = filesRef.current.filter((f) => !sentFileIdsRef.current.has(f.id));
+                        if (remaining.length > 0) {
+                            sendPendingFiles();
+                        }
+                    }, 400);
+                },
+                onError: (msg) => {
+                    isSendingRef.current = false;
+                    setIsSending(false);
+                    setError(msg);
+                    setStatus('Quá trình truyền tệp thất bại');
+                },
+                isDestroyed: () => destroyedRef.current || peerInstance.destroyed,
+            }
+        );
+    }, []);
+
+    // Keep refs in sync and send newly added files if peer is already connected
+    useEffect(() => {
+        filesRef.current = files;
+        if (peerRef.current && !peerRef.current.destroyed && !isSendingRef.current) {
+            const channel = (peerRef.current as any)._channel as RTCDataChannel | undefined;
+            if (channel && channel.readyState === 'open') {
+                sendPendingFiles();
+            }
+        }
+    }, [files, sendPendingFiles]);
 
     // Signaling callbacks
     const onSignal = useCallback((data: { signal: unknown }) => {
@@ -207,6 +291,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             },
         });
 
+        peerRef.current = peer;
+
         peer.on('signal', (signal) => {
             signaling.sendSignal({ target: userId, signal });
         });
@@ -216,60 +302,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             checkConnectionType(peer);
 
             // Start sending files
-            const filesToSend = filesRef.current;
-            if (filesToSend.length === 0) {
-                setStatus('Đã kết nối. Đang chờ...');
+            if (filesRef.current.length === 0) {
+                setStatus('Đã kết nối P2P! Vui lòng chọn tệp để bắt đầu gửi...');
                 return;
             }
 
-            setStatus('Đang gửi tệp qua P2P...');
-            const peerForSender = peer;
-
-            const channel = (peer as any)._channel as RTCDataChannel | undefined;
-
-            sendFiles(
-                {
-                    send: (d: string | Uint8Array) => peerForSender.send(d),
-                    onData: (h: (data: string | Uint8Array | ArrayBuffer) => void) => {
-                        peerForSender.on('data', h);
-                        return () => peerForSender.off('data', h);
-                    },
-                    channel: channel as any,
-                },
-                filesToSend.map((f) => ({ id: f.id, file: f.file })),
-                {
-                    onFileStart: (index, total, fileName) => {
-                        setStatus(`Đang gửi tệp ${index + 1}/${total}: ${fileName}`);
-                        setCurrentFileName(fileName);
-                        setProgress(0);
-                    },
-                    onProgress: (percent) => setProgress(percent),
-                    onSpeed: (bps, eta) => {
-                        setCurrentBps(bps);
-                        setTransferSpeed(formatSpeed(bps));
-                        setEstimatedTime(formatETA(eta));
-                    },
-                    onSpeedReset: () => {
-                        setCurrentBps(0);
-                        setTransferSpeed('');
-                        setEstimatedTime('');
-                    },
-                    onAllSent: () => {
-                        setProgress(100);
-                        setStatus('Đã gửi toàn bộ tệp thành công!');
-                        soundManager.playSuccess();
-                        sendTransferNotification(
-                            'Đã gửi tệp thành công!',
-                            'Tất cả tệp đã được chuyển an toàn qua WebRTC P2P.'
-                        );
-                    },
-                    onError: (msg) => {
-                        setError(msg);
-                        setStatus('Quá trình truyền tệp thất bại');
-                    },
-                    isDestroyed: () => destroyedRef.current || peer.destroyed,
-                }
-            );
+            sendPendingFiles();
         });
 
         peer.on('data', (data) => {
@@ -417,13 +455,29 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         }
     }, [activeRoomId, isReceiver, signaling.isConnected, joinAsReceiver]);
 
+    // Reset session (sender side)
+    const handleResetSession = () => {
+        if (peerRef.current && !peerRef.current.destroyed) {
+            peerRef.current.destroy();
+            peerRef.current = null;
+        }
+        setGeneratedLink('');
+        setStatus('Chọn tệp để bắt đầu gửi');
+        setProgress(0);
+        setCurrentFileName('');
+        setCurrentBps(0);
+        setTransferSpeed('');
+        setEstimatedTime('');
+        sentFileIdsRef.current.clear();
+        isSendingRef.current = false;
+        setIsSending(false);
+        createdRoomRef.current = null;
+        hasJoinedRef.current = false;
+        joinedRoomRef.current = null;
+    };
+
     // Generate share link (sender side)
     const handleCreateLink = () => {
-        if (files.length === 0) {
-            setError('Vui lòng chọn ít nhất một tệp để chia sẻ');
-            return;
-        }
-
         requestNotificationPermission();
 
         const newRoomId = uuidv4();
@@ -432,7 +486,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
         setGeneratedLink(link);
         createdRoomRef.current = newRoomId;
-        setStatus('Đang chờ người nhận kết nối...');
+        setStatus(files.length > 0 ? 'Đang chờ người nhận kết nối...' : 'Phòng chia sẻ đã tạo! Thêm tệp để gửi...');
 
         signaling.joinRoom(newRoomId);
     };
@@ -600,17 +654,26 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         <Upload className="h-12 w-12 mx-auto mb-3 text-blue-600" />
                         <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tập tin vào đây hoặc nhấn duyệt file</p>
                         <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền đa file đồng thời. Tính toán SHA-256 bảo toàn toàn vẹn dữ liệu gốc.</p>
-                        <label>
-                            <input
-                                type="file"
-                                multiple
-                                onChange={handleFileSelection}
-                                className="hidden"
-                            />
-                            <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
-                                <span className="cursor-pointer">Duyệt tập tin</span>
+                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                            <label>
+                                <input
+                                    type="file"
+                                    multiple
+                                    onChange={handleFileSelection}
+                                    className="hidden"
+                                />
+                                <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
+                                    <span className="cursor-pointer">Duyệt tập tin</span>
+                                </Button>
+                            </label>
+                            <Button
+                                variant="outline"
+                                onClick={handleCreateLink}
+                                className="border-slate-200 text-slate-700 hover:text-blue-600 hover:bg-white text-xs font-semibold"
+                            >
+                                Tạo phòng trước, thêm tệp sau →
                             </Button>
-                        </label>
+                        </div>
                     </div>
 
                     {/* File List */}
@@ -757,6 +820,104 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} isComplete={progress === 100} />
                             </>
                         )}
+                    </div>
+
+                    {/* Active Files Management in Session */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                            <div>
+                                <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
+                                    <span>Tệp đang chia sẻ</span>
+                                    <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-mono font-bold border border-blue-200/80">
+                                        {files.length} {files.length > 1 ? 'tệp' : 'tệp'}
+                                    </span>
+                                </h3>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Tổng dung lượng: <strong className="text-slate-700">{formatBytes(totalBytes)}</strong>
+                                </p>
+                            </div>
+
+                            {/* Add More Files Button */}
+                            <label className="shrink-0">
+                                <input
+                                    type="file"
+                                    multiple
+                                    onChange={handleFileSelection}
+                                    className="hidden"
+                                    disabled={isSending}
+                                />
+                                <Button
+                                    asChild
+                                    size="sm"
+                                    disabled={isSending}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
+                                >
+                                    <span>
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Thêm tệp
+                                    </span>
+                                </Button>
+                            </label>
+                        </div>
+
+                        {/* Drop zone to add more files */}
+                        <div
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                            className={`border-2 border-dashed rounded-xl p-4 text-center transition-all ${
+                                isDragging
+                                    ? 'border-blue-500 bg-blue-50/80 shadow-xs'
+                                    : 'border-slate-200 hover:border-blue-300 bg-slate-50/60 hover:bg-blue-50/30'
+                            }`}
+                        >
+                            <label className="flex items-center justify-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input
+                                    type="file"
+                                    multiple
+                                    onChange={handleFileSelection}
+                                    className="hidden"
+                                    disabled={isSending}
+                                />
+                                <Upload className="w-4 h-4 text-blue-600" />
+                                <span>
+                                    Kéo thả thêm tệp vào đây hoặc{' '}
+                                    <strong className="text-blue-600 hover:underline">duyệt từ máy</strong>
+                                </span>
+                            </label>
+                        </div>
+
+                        {/* List of files with FileCard */}
+                        {files.length > 0 ? (
+                            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                {files.map((f) => (
+                                    <FileCard
+                                        key={f.id}
+                                        id={f.id}
+                                        file={f.file}
+                                        onDelete={handleDeleteFile}
+                                        showDelete={!isSending}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="py-6 text-center text-xs text-slate-400">
+                                Chưa có tệp nào được chọn. Nhấn <strong>+ Thêm tệp</strong> hoặc kéo thả file vào khung trên.
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Reset Session Button */}
+                    <div className="text-center pt-2">
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleResetSession}
+                            className="text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 gap-1.5 transition-colors"
+                        >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            Đóng phòng & Tạo phiên mới
+                        </Button>
                     </div>
                 </div>
             )}
