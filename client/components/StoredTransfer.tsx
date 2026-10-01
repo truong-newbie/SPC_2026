@@ -225,43 +225,26 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
 
     const totalSelectedBytes = selectedFiles.reduce((acc, f) => acc + f.size, 0);
 
-    // Dynamic TTL options based on file size:
-    // - File nhỏ (< 20MB): Tối đa 24 giờ
-    // - File trung bình (20MB - 100MB): Tối đa 6 giờ
-    // - File lớn (> 100MB): Tối đa 2 giờ (đủ người nhận tải, bảo vệ ổ cứng server)
+    // Dynamic TTL policy based on file size:
+    // - File nhỏ (< 20MB): Tự động gán 24 giờ
+    // - File trung bình (20MB - 100MB): Tự động gán 6 giờ
+    // - File lớn (> 100MB): Tự động gán 2 giờ (tiết kiệm ổ cứng server)
     const MB = 1024 * 1024;
-    let maxAllowedTtlHours = 24;
-    let ttlOptions = [
-        { hours: 1, label: '1 giờ' },
-        { hours: 6, label: '6 giờ' },
-        { hours: 12, label: '12 giờ' },
-        { hours: 24, label: '24 giờ (mặc định)' },
-    ];
-    let ttlHint = 'Tệp nhỏ (< 20MB): Cho phép lưu tối đa 24 giờ';
+    let autoTtlHours = 24;
+    let sizeCategory = 'Tệp nhỏ (< 20MB)';
 
     if (totalSelectedBytes > 100 * MB) {
-        maxAllowedTtlHours = 2;
-        ttlOptions = [
-            { hours: 1, label: '1 giờ' },
-            { hours: 2, label: '2 giờ (Tối đa)' },
-        ];
-        ttlHint = 'Tệp lớn (> 100MB): Tối đa 2 giờ';
+        autoTtlHours = 2;
+        sizeCategory = 'Tệp lớn (> 100MB)';
     } else if (totalSelectedBytes > 20 * MB) {
-        maxAllowedTtlHours = 6;
-        ttlOptions = [
-            { hours: 1, label: '1 giờ' },
-            { hours: 4, label: '4 giờ' },
-            { hours: 6, label: '6 giờ (Tối đa)' },
-        ];
-        ttlHint = 'Tệp trung bình (20MB - 100MB): Tối đa 6 giờ';
+        autoTtlHours = 6;
+        sizeCategory = 'Tệp trung bình (20MB - 100MB)';
     }
 
-    // Auto-adjust ttlHours if current selection exceeds dynamic limit
+    // Auto-sync ttlHours to dynamic policy
     useEffect(() => {
-        if (ttlHours > maxAllowedTtlHours) {
-            setTtlHours(maxAllowedTtlHours);
-        }
-    }, [maxAllowedTtlHours, ttlHours]);
+        setTtlHours(autoTtlHours);
+    }, [autoTtlHours]);
 
     // ---------------------------------------------------------------------------
     // Sender: Encrypt & Upload
@@ -1001,57 +984,49 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                         </div>
                     )}
 
-                    {/* Options Grid */}
+                    {/* Options Container */}
                     <div className="space-y-4 pt-2 border-t">
-                        {/* Expiration (TTL) with Dynamic Limits */}
-                        <div className="space-y-2">
-                            <div className="flex items-center justify-between flex-wrap gap-1">
-                                <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                                    <Clock className="w-3.5 h-3.5 text-primary" />
-                                    Thời gian lưu tạm trên server:
-                                </label>
-                                <span className="text-[11px] text-muted-foreground bg-muted px-2 py-0.5 rounded font-medium">
-                                    {ttlHint}
-                                </span>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {ttlOptions.map((item) => (
-                                    <button
-                                        key={item.hours}
-                                        type="button"
-                                        onClick={() => setTtlHours(item.hours)}
-                                        className={`px-3 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                                            ttlHours === item.hours
-                                                ? 'bg-primary text-primary-foreground border-primary'
-                                                : 'hover:bg-muted/50 bg-background text-foreground'
-                                        }`}
-                                    >
-                                        {item.label}
-                                    </button>
-                                ))}
-                            </div>
+                        {/* Security & Storage Policy Notification Card */}
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 space-y-2.5">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
+                            <ShieldCheck className="w-4 h-4 text-blue-600" />
+                            <span>Chính sách lưu trữ & Tự hủy bảo mật</span>
                         </div>
 
-                        {/* Burn After Reading Checkbox (Recommended, default ON) */}
-                        <div className="p-3 rounded-xl border bg-emerald-500/5 border-emerald-500/20 flex items-start gap-3">
-                            <input
-                                id="burn-toggle"
-                                type="checkbox"
-                                checked={burnAfterReading}
-                                onChange={(e) => setBurnAfterReading(e.target.checked)}
-                                className="mt-1 w-4 h-4 rounded text-primary focus:ring-primary border-muted-foreground/30 cursor-pointer"
-                            />
-                            <label htmlFor="burn-toggle" className="text-xs space-y-0.5 cursor-pointer">
-                                <div className="font-semibold text-foreground flex items-center gap-1.5">
-                                    <Flame className="w-3.5 h-3.5 text-rose-500" />
-                                    <span>Tự hủy ngay sau 1 lần tải thành công (Burn after reading)</span>
-                                    <span className="text-[10px] bg-rose-500/10 text-rose-600 px-1.5 py-0.5 rounded font-medium">Mặc định bật</span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {/* Auto TTL Info Card */}
+                            <div className="bg-white border border-slate-200/70 rounded-lg p-3 flex items-start gap-2.5 shadow-2xs">
+                                <Clock className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                                <div className="space-y-0.5 text-xs">
+                                    <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                                        <span>Thời hạn lưu tạm:</span>
+                                        <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                                            {autoTtlHours} giờ
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                                        {sizeCategory}. Tệp sẽ tự động hủy nếu người nhận không tải trước hạn chót.
+                                    </p>
                                 </div>
-                                <div className="text-muted-foreground">
-                                    Server tự động xóa sạch file vĩnh viễn ngay khi người nhận tải xong 100%, bảo vệ tuyệt đối quyền riêng tư và giải phóng ổ cứng.
+                            </div>
+
+                            {/* Auto Burn After Reading Info Card */}
+                            <div className="bg-white border border-slate-200/70 rounded-lg p-3 flex items-start gap-2.5 shadow-2xs">
+                                <Flame className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                <div className="space-y-0.5 text-xs">
+                                    <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
+                                        <span>Tự hủy sau khi tải:</span>
+                                        <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                            Luôn bật
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                                        Xóa vĩnh viễn khỏi máy chủ ngay khi tải xong 100%, bảo vệ tuyệt đối quyền riêng tư.
+                                    </p>
                                 </div>
-                            </label>
+                            </div>
                         </div>
+                    </div>
 
                         {/* Encryption Password */}
                         <div className="space-y-2">
