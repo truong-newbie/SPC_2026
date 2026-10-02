@@ -673,12 +673,11 @@ export default function Home() {
             {/* =================================================================== */}
             {/* FOOTER SÁNG & GỌN GÀNG                                              */}
             {/* =================================================================== */}
-            <footer className="border-t border-slate-200/80 bg-white py-8 text-xs text-slate-500 font-medium">
+            <footer className="border-t border-slate-200/80 bg-white py-6 text-xs text-slate-500 font-medium">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
                     <div className="flex items-center gap-2.5">
                         <img src="/logo.png" alt="FileBridge Logo" className="w-5 h-5 object-contain" />
                         <span className="text-slate-900 font-bold">FileBridge</span>
-                        <span>• Tác giả: Đỗ Đăng Trường • Dự án tham dự SPC 2026</span>
                     </div>
                     <div className="flex items-center gap-5 text-slate-600 font-semibold">
                         <a href="#transfer-card" className="hover:text-blue-600 transition-colors">

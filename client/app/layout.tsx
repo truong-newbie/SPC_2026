@@ -120,7 +120,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="light-bg text-slate-700 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 pb-20 relative">
+      <body className="light-bg text-slate-700 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 relative">
         <GoogleAnalytics />
         {children}
       </body>
