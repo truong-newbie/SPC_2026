@@ -48,6 +48,8 @@ import {
     Plus,
     RotateCcw,
     Archive,
+    Folder,
+    FolderUp,
 } from 'lucide-react';
 import { createZip, generateZipFilename, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
 
@@ -106,7 +108,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
     }, [progress, currentFileName, transferSpeed]);
 
     // File management
-    const { files, isDragging, totalBytes, handleFileSelection, handleDeleteFile, handleDragOver, handleDragLeave, handleDrop } = useFileManagement();
+    const { files, isDragging, totalBytes, handleFileSelection, handleFolderSelection, handleDeleteFile, handleDragOver, handleDragLeave, handleDrop } = useFileManagement();
     const { relayEnabled } = useRelayConfiguration();
     const [rawIceServers, setRawIceServers] = useState<RTCIceServer[]>(DEFAULT_ICE_SERVERS);
 
@@ -141,7 +143,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         setZipError(null);
 
         try {
-            const filesToZip = validFiles.map((f) => ({ name: f.fileName, blob: f.blob! }));
+            const filesToZip = validFiles.map((f) => ({
+                name: f.fileName,
+                blob: f.blob!,
+                relativePath: f.relativePath,
+            }));
             const zipFilename = generateZipFilename(activeRoomId || undefined);
 
             const zipBlob = await createZip(filesToZip, {
@@ -196,7 +202,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                 },
                 channel: channel as any,
             },
-            pending.map((f) => ({ id: f.id, file: f.file })),
+            pending.map((f) => ({ id: f.id, file: f.file, relativePath: f.relativePath })),
             {
                 onFileStart: (index, total, fileName) => {
                     setStatus(`Đang gửi tệp ${index + 1}/${total}: ${fileName}`);
@@ -696,9 +702,9 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         }`}
                     >
                         <Upload className="h-12 w-12 mx-auto mb-3 text-blue-600" />
-                        <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tập tin vào đây hoặc nhấn duyệt file</p>
-                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền đa file đồng thời. Tính toán SHA-256 bảo toàn toàn vẹn dữ liệu gốc.</p>
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                        <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tệp hoặc thư mục vào đây</p>
+                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền nhiều tệp và cả thư mục nguyên vẹn cấu trúc. SHA-256 xác thực toàn vẹn.</p>
+                        <div className="flex flex-wrap items-center justify-center gap-3">
                             <label>
                                 <input
                                     type="file"
@@ -707,7 +713,25 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     className="hidden"
                                 />
                                 <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
-                                    <span className="cursor-pointer">Duyệt tập tin</span>
+                                    <span className="cursor-pointer flex items-center gap-1.5">
+                                        <Upload className="w-4 h-4" />
+                                        Chọn tệp tin
+                                    </span>
+                                </Button>
+                            </label>
+                            <label>
+                                <input
+                                    type="file"
+                                    multiple
+                                    {...({ webkitdirectory: '', directory: '' } as any)}
+                                    onChange={handleFolderSelection}
+                                    className="hidden"
+                                />
+                                <Button asChild variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50/80 shadow-xs">
+                                    <span className="cursor-pointer flex items-center gap-1.5">
+                                        <FolderUp className="w-4 h-4 text-blue-600" />
+                                        Chọn thư mục
+                                    </span>
                                 </Button>
                             </label>
                             <Button
@@ -881,27 +905,51 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 </p>
                             </div>
 
-                            {/* Add More Files Button */}
-                            <label className="shrink-0">
-                                <input
-                                    type="file"
-                                    multiple
-                                    onChange={handleFileSelection}
-                                    className="hidden"
-                                    disabled={isSending}
-                                />
-                                <Button
-                                    asChild
-                                    size="sm"
-                                    disabled={isSending}
-                                    className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
-                                >
-                                    <span>
-                                        <Plus className="w-3.5 h-3.5" />
-                                        Thêm tệp
-                                    </span>
-                                </Button>
-                            </label>
+                            {/* Add More Files / Folder Buttons */}
+                            <div className="flex items-center gap-2 shrink-0">
+                                <label>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        onChange={handleFileSelection}
+                                        className="hidden"
+                                        disabled={isSending}
+                                    />
+                                    <Button
+                                        asChild
+                                        size="sm"
+                                        disabled={isSending}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-2.5 py-1.5"
+                                    >
+                                        <span>
+                                            <Plus className="w-3.5 h-3.5" />
+                                            Thêm tệp
+                                        </span>
+                                    </Button>
+                                </label>
+                                <label>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        {...({ webkitdirectory: '', directory: '' } as any)}
+                                        onChange={handleFolderSelection}
+                                        className="hidden"
+                                        disabled={isSending}
+                                    />
+                                    <Button
+                                        asChild
+                                        size="sm"
+                                        variant="outline"
+                                        disabled={isSending}
+                                        className="border-slate-300 text-slate-700 hover:bg-slate-50 gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-2.5 py-1.5"
+                                    >
+                                        <span>
+                                            <FolderUp className="w-3.5 h-3.5 text-blue-600" />
+                                            Thêm thư mục
+                                        </span>
+                                    </Button>
+                                </label>
+                            </div>
                         </div>
 
                         {/* Drop zone to add more files */}
@@ -925,7 +973,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 />
                                 <Upload className="w-4 h-4 text-blue-600" />
                                 <span>
-                                    Kéo thả thêm tệp vào đây hoặc{' '}
+                                    Kéo thả thêm tệp hoặc thư mục vào đây hoặc{' '}
                                     <strong className="text-blue-600 hover:underline">duyệt từ máy</strong>
                                 </span>
                             </label>
@@ -939,6 +987,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                         key={f.id}
                                         id={f.id}
                                         file={f.file}
+                                        relativePath={f.relativePath}
                                         onDelete={handleDeleteFile}
                                         showDelete={!isSending}
                                     />
@@ -1045,8 +1094,19 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                             <div className="flex items-center gap-3 min-w-0 flex-1">
                                                 <FileIcon fileName={f.fileName} mimeType={f.blob?.type} size="md" />
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="truncate text-sm font-semibold text-slate-800">{f.fileName}</p>
-                                                    <p className="text-xs text-slate-500 font-medium">{formatBytes(f.fileSize)}</p>
+                                                    <p className="truncate text-sm font-semibold text-slate-800" title={f.relativePath || f.fileName}>{f.fileName}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-xs text-slate-500 font-medium">{formatBytes(f.fileSize)}</p>
+                                                        {f.relativePath && f.relativePath.includes('/') && (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 border border-blue-200/60 rounded font-mono truncate max-w-[200px]"
+                                                                title={f.relativePath}
+                                                            >
+                                                                <Folder className="w-3 h-3 shrink-0" />
+                                                                <span className="truncate">{f.relativePath.slice(0, f.relativePath.lastIndexOf('/'))}</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-1.5 shrink-0">

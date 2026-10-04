@@ -37,6 +37,7 @@ export interface SenderCallbacks {
 export interface FileEntry {
     id: string;
     file: File;
+    relativePath?: string;
 }
 
 export interface BufferChannel {
@@ -217,7 +218,7 @@ async function sendSingleFile(
     }
 
     try {
-        send(metadataMessage(id, file.name, file.size, index, total, totalBytes, undefined, checksum));
+        send(metadataMessage(id, file.name, file.size, index, total, totalBytes, undefined, checksum, entry.relativePath));
     } catch {
         return false;
     }

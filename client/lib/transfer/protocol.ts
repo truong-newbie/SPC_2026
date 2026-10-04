@@ -34,6 +34,7 @@ export interface Metadata {
     pvMin?: number;
     ver?: string;
     checksum?: string;
+    relativePath?: string;
 }
 
 export interface Ack {
@@ -79,7 +80,8 @@ export function metadataMessage(
     total: number,
     totalBytes: number,
     ver?: string,
-    checksum?: string
+    checksum?: string,
+    relativePath?: string
 ): string {
     return JSON.stringify({
         type: 'metadata',
@@ -93,6 +95,7 @@ export function metadataMessage(
         pvMin: MIN_PROTOCOL_VERSION,
         ver,
         checksum,
+        relativePath,
     } satisfies Metadata);
 }
 

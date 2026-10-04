@@ -27,6 +27,8 @@ import {
     HardDrive,
     Key,
     Archive,
+    Folder,
+    FolderUp,
 } from 'lucide-react';
 import { Button } from './Button';
 import { FileIcon } from './FileIcon';
@@ -34,6 +36,7 @@ import { ProgressBar } from './ProgressBar';
 import { formatBytes, downloadBlob } from '@/lib/download';
 import { createZip, generateZipFilename, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
 import { packFiles, unpackFiles, type UnpackedFile } from '@/lib/swarm/pack';
+import { getFilesFromDataTransfer, getFilesFromInput } from '@/lib/directory';
 import {
     encryptData,
     decryptData,
@@ -124,6 +127,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     const [copiedPass, setCopiedPass] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
 
     // Initialize default password for sender
     useEffect(() => {
@@ -174,8 +178,17 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     // ---------------------------------------------------------------------------
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            const newFiles = Array.from(e.target.files);
-            addFiles(newFiles);
+            const scanned = getFilesFromInput(e.target.files);
+            addFiles(scanned.map((s) => s.file));
+            e.target.value = '';
+        }
+    };
+
+    const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const scanned = getFilesFromInput(e.target.files);
+            addFiles(scanned.map((s) => s.file));
+            e.target.value = '';
         }
     };
 
@@ -200,6 +213,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
         setSelectedFiles([]);
         setUploadError('');
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (folderInputRef.current) folderInputRef.current.value = '';
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -214,12 +228,13 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
         setIsDragging(false);
     };
 
-    const handleDrop = (e: React.DragEvent) => {
+    const handleDrop = async (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         setIsDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            addFiles(Array.from(e.dataTransfer.files));
+        const scanned = await getFilesFromDataTransfer(e.dataTransfer);
+        if (scanned.length > 0) {
+            addFiles(scanned.map((s) => s.file));
         }
     };
 
@@ -448,7 +463,11 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
         setZipProgress(null);
 
         try {
-            const filesToZip = downloadedFiles.map((f) => ({ name: f.name, blob: f.blob }));
+            const filesToZip = downloadedFiles.map((f) => ({
+                name: f.name,
+                blob: f.blob,
+                relativePath: f.relativePath,
+            }));
             const zipFilename = generateZipFilename(receiverFileId || undefined);
             const zipBlob = await createZip(filesToZip, {
                 filename: zipFilename,
@@ -714,11 +733,20 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                                 <div className="flex items-center gap-3 min-w-0 pr-4">
                                                     <FileIcon fileName={file.name} mimeType={file.blob?.type} size="sm" />
                                                     <div className="min-w-0">
-                                                        <div className="text-sm font-medium truncate">
+                                                        <div className="text-sm font-medium truncate" title={file.relativePath || file.name}>
                                                             {file.name}
                                                         </div>
-                                                        <div className="text-xs text-muted-foreground">
-                                                            {formatBytes(file.size)}
+                                                        <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                                                            <span>{formatBytes(file.size)}</span>
+                                                            {file.relativePath && file.relativePath.includes('/') && (
+                                                                <span
+                                                                    className="inline-flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 border border-blue-200/60 rounded font-mono truncate max-w-[180px]"
+                                                                    title={file.relativePath}
+                                                                >
+                                                                    <Folder className="w-3 h-3 shrink-0" />
+                                                                    <span className="truncate">{file.relativePath.slice(0, file.relativePath.lastIndexOf('/'))}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -916,8 +944,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                        className={`relative border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                        className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
                             isDragging
                                 ? 'border-primary bg-primary/5'
                                 : 'border-muted-foreground/25 hover:border-primary/50 hover:bg-muted/20'
@@ -930,17 +957,46 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             onChange={handleFileSelect}
                             className="hidden"
                         />
+                        <input
+                            ref={folderInputRef}
+                            type="file"
+                            multiple
+                            {...({ webkitdirectory: '', directory: '' } as any)}
+                            onChange={handleFolderSelect}
+                            className="hidden"
+                        />
                         <div className="flex flex-col items-center gap-3">
                             <div className="p-3 rounded-full bg-primary/10 text-primary">
                                 <Upload className="w-6 h-6" />
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-foreground">
-                                    Nhấn để chọn file hoặc kéo thả vào đây
+                                    Kéo thả tệp hoặc thư mục vào đây
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Hỗ trợ chọn nhiều file cùng lúc. Tối đa 500 MB cho mỗi gói file.
+                                    Hỗ trợ chọn nhiều tệp và cả thư mục cùng lúc. Tối đa 500 MB cho mỗi gói file.
                                 </p>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
+                                >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    Chọn tệp
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => folderInputRef.current?.click()}
+                                    className="border-slate-300 text-slate-700 hover:bg-slate-100 gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
+                                >
+                                    <FolderUp className="w-3.5 h-3.5 text-blue-600" />
+                                    Chọn thư mục
+                                </Button>
                             </div>
                         </div>
                     </div>
@@ -960,26 +1016,45 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto divide-y border rounded-xl bg-background">
-                                {selectedFiles.map((file, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/30 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0 pr-2">
-                                            <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
-                                            <span className="font-medium truncate">{file.name}</span>
-                                            <span className="text-muted-foreground shrink-0">
-                                                ({formatBytes(file.size)})
-                                            </span>
-                                        </div>
-                                        <button
-                                            onClick={() => removeFile(idx)}
-                                            className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                                {selectedFiles.map((file, idx) => {
+                                    const relPath = (file as any).relativePath as string | undefined;
+                                    const folderPath = relPath && relPath.includes('/')
+                                        ? relPath.slice(0, relPath.lastIndexOf('/'))
+                                        : null;
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="flex items-center justify-between p-2.5 text-xs hover:bg-muted/30 transition-colors"
                                         >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
+                                            <div className="flex items-center gap-2 min-w-0 pr-2">
+                                                <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
+                                                <div className="min-w-0">
+                                                    <span className="font-medium truncate block" title={relPath || file.name}>{file.name}</span>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-muted-foreground shrink-0">
+                                                            {formatBytes(file.size)}
+                                                        </span>
+                                                        {folderPath && (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50/80 px-1.5 py-0.2 border border-blue-200/60 rounded font-mono truncate max-w-[180px]"
+                                                                title={relPath}
+                                                            >
+                                                                <Folder className="w-2.5 h-2.5 shrink-0" />
+                                                                <span className="truncate">{folderPath}</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => removeFile(idx)}
+                                                className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
                     )}

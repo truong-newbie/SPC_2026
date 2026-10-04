@@ -79,7 +79,13 @@
 
 ## 3. Tính Năng Nổi Bật
 
-- 📦 **Tải toàn bộ dưới dạng file ZIP (1-Click ZIP All):** Sử dụng thư viện siêu nhẹ `fflate` đóng gói toàn bộ file nhận được thành file `.zip` ngay trong bộ nhớ trình duyệt (Store mode, UTF-8 tiếng Việt, không tốn CPU nén lại).
+- 📁 **Truyền Thư Mục Giữ Nguyên Cây Phân Cấp (Folder & Directory Tree Transfer):** 
+  - Hỗ trợ kéo thả cả thư mục lẫn file đơn lẻ cùng lúc, hoặc chọn thư mục trực tiếp qua nút duyệt chuyên dụng (`webkitdirectory`).
+  - Tự động duyệt đệ quy cây thư mục (Recursive Directory Traversal) bằng WebKit FileSystem API.
+  - Hiển thị nhãn thư mục (breadcrumb) rõ ràng cho từng file.
+  - Khi người nhận bấm **"Tải toàn bộ (.zip)"**, toàn bộ cây thư mục gốc và thư mục con lồng nhau được giải nén/đóng gói chính xác 100% như trên máy người gửi.
+  - Tương thích hoàn hảo trên cả 3 chế độ: P2P 1-1, Swarm chia sẻ nhóm và Lưu trữ tạm E2EE.
+- 📦 **Tải toàn bộ dưới dạng file ZIP (1-Click ZIP All):** Sử dụng thư viện siêu nhẹ `fflate` đóng gói toàn bộ file và thư mục nhận được thành file `.zip` ngay trong bộ nhớ trình duyệt (Store mode, UTF-8 tiếng Việt, không tốn CPU nén lại).
 - 🛡️ **Kiểm tra toàn vẹn mật mã SHA-256:** Tự động tính hash SHA-256 của file gửi và file nhận theo thời gian thực bằng WebCrypto API, đối chiếu và gắn huy hiệu toàn vẹn 100%.
 - 📱 **Quét mã QR siêu tốc:** Tích hợp camera scanner (`jsqr`) và bộ sinh mã QR (`qrcode.react`) giúp kết nối máy tính $\leftrightarrow$ điện thoại trong 1 giây mà không cần gõ link.
 - ⚡ **Biểu đồ sóng tốc độ (Speed Waveform):** Trực quan hóa tốc độ truyền tải MB/s theo thời gian thực dạng sóng âm thanh động.
@@ -127,8 +133,8 @@ SPC_2026/
 │   │   ├── crypto/              # Checksum SHA-256, E2EE AES-GCM
 │   │   ├── swarm/               # WebTorrent packaging, Piece manager
 │   │   ├── transfer/            # P2P Protocol, Sender, Receiver engines
-│   │   └── zipManager.ts        # Client-side fflate ZIP packager
-│   └── public/                  # Favicons, Logos, Manifest, Video assets
+│   │   ├── directory.ts         # Duyệt đệ quy thư mục & quét cây thư mục (WebKit FileSystem API)
+│   │   └── zipManager.ts        # Client-side fflate ZIP packager (bảo toàn cây thư mục)│   └── public/                  # Favicons, Logos, Manifest, Video assets
 │
 └── server/                      # Node.js Signaling & Storage Backend
     ├── server.js                # Express Server, Socket.IO Signaling, API routes
@@ -277,3 +283,4 @@ Dự án được xây dựng và phát triển phục vụ mục đích nghiên
 
 - **Tác giả:** Đỗ Đăng Trường
 - **Giấy phép:** [MIT License](LICENSE) — Miễn phí sử dụng và phát triển mã nguồn mở.
+

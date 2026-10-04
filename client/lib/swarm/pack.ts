@@ -9,20 +9,30 @@ const MAGIC = 'SPCPKG10'; // 8-byte magic header
 export interface PackedFileInfo {
     name: string;
     size: number;
+    relativePath?: string;
 }
 
 export interface UnpackedFile {
     name: string;
     size: number;
     blob: Blob;
+    relativePath?: string;
 }
+
+export type PackableFileInput = File | (File & { relativePath?: string }) | {
+    name: string;
+    size: number;
+    arrayBuffer(): Promise<ArrayBuffer>;
+    relativePath?: string;
+    webkitRelativePath?: string;
+};
 
 /**
  * Pack one or more files into a single ArrayBuffer.
  * If there is only 1 file, returns the raw file ArrayBuffer directly (for zero overhead).
  * If there are multiple files, bundles them with the SPCPKG10 container header.
  */
-export async function packFiles(files: File[]): Promise<{
+export async function packFiles(files: PackableFileInput[]): Promise<{
     buffer: ArrayBuffer;
     totalSize: number;
     fileCount: number;
@@ -36,13 +46,16 @@ export async function packFiles(files: File[]): Promise<{
     // Single file optimization - keep raw
     if (files.length === 1) {
         const file = files[0];
+        const relPath = ('relativePath' in file && file.relativePath)
+            ? file.relativePath
+            : ('webkitRelativePath' in file && file.webkitRelativePath ? file.webkitRelativePath : undefined);
         const buffer = await file.arrayBuffer();
         return {
             buffer,
             totalSize: file.size,
             fileCount: 1,
             displayName: file.name,
-            files: [{ name: file.name, size: file.size }],
+            files: [{ name: file.name, size: file.size, relativePath: relPath }],
         };
     }
 
@@ -50,6 +63,9 @@ export async function packFiles(files: File[]): Promise<{
     const manifest: PackedFileInfo[] = files.map((f) => ({
         name: f.name,
         size: f.size,
+        relativePath: ('relativePath' in f && f.relativePath)
+            ? f.relativePath
+            : ('webkitRelativePath' in f && f.webkitRelativePath ? f.webkitRelativePath : undefined),
     }));
 
     const manifestJson = JSON.stringify({ files: manifest });
@@ -140,6 +156,7 @@ export function unpackFiles(
                                     name: String(item.name || 'file'),
                                     size: fileSize,
                                     blob,
+                                    relativePath: item.relativePath ? String(item.relativePath) : undefined,
                                 });
                                 fileOffset += fileSize;
                             }
@@ -166,7 +183,7 @@ export function unpackFiles(
     ];
 }
 
-function formatDisplayName(files: File[]): string {
+function formatDisplayName(files: { name: string }[]): string {
     if (files.length <= 2) {
         return files.map((f) => f.name).join(', ');
     }

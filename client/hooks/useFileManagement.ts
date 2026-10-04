@@ -2,10 +2,12 @@
 
 import { useState, type ChangeEvent, type DragEvent } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { getFilesFromDataTransfer, getFilesFromInput, type ScannedFile } from '@/lib/directory';
 
 export interface FileWithId {
     id: string;
     file: File;
+    relativePath?: string;
 }
 
 export function useFileManagement() {
@@ -14,17 +16,28 @@ export function useFileManagement() {
 
     const totalBytes = files.reduce((sum, f) => sum + f.file.size, 0);
 
-    const addFiles = (incoming: FileList) => {
-        const mapped = Array.from(incoming).map((file) => ({
+    const appendScannedFiles = (incoming: ScannedFile[]) => {
+        if (!incoming || incoming.length === 0) return;
+        const mapped: FileWithId[] = incoming.map(({ file, relativePath }) => ({
             id: uuidv4(),
             file,
+            relativePath,
         }));
         setFiles((prev) => [...prev, ...mapped]);
     };
 
     const handleFileSelection = (e: ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
-            addFiles(e.target.files);
+            const scanned = getFilesFromInput(e.target.files);
+            appendScannedFiles(scanned);
+            e.target.value = '';
+        }
+    };
+
+    const handleFolderSelection = (e: ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const scanned = getFilesFromInput(e.target.files);
+            appendScannedFiles(scanned);
             e.target.value = '';
         }
     };
@@ -43,22 +56,30 @@ export function useFileManagement() {
         setIsDragging(false);
     };
 
-    const handleDrop = (e: DragEvent) => {
+    const handleDrop = async (e: DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-            addFiles(e.dataTransfer.files);
+        const scanned = await getFilesFromDataTransfer(e.dataTransfer);
+        if (scanned.length > 0) {
+            appendScannedFiles(scanned);
         }
+    };
+
+    const clearFiles = () => {
+        setFiles([]);
     };
 
     return {
         files,
+        setFiles,
         isDragging,
         totalBytes,
         handleFileSelection,
+        handleFolderSelection,
         handleDeleteFile,
         handleDragOver,
         handleDragLeave,
         handleDrop,
+        clearFiles,
     };
 }

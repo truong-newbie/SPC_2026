@@ -30,7 +30,10 @@ import {
     Files,
     Eye,
     Archive,
+    Folder,
+    FolderUp,
 } from 'lucide-react';
+import { getFilesFromDataTransfer, getFilesFromInput } from '@/lib/directory';
 
 interface SwarmTransferProps {
     className?: string;
@@ -88,6 +91,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const socketRef = useRef<Socket | null>(null);
     const swarmRef = useRef<SwarmManager | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const folderInputRef = useRef<HTMLInputElement>(null);
 
     const serverUrl = socketUrl || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:3001' : '');
 
@@ -238,18 +242,30 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         };
     }, [serverUrl]);
 
-    // Handle file selection (multi-file)
-    const handleFileSelect = useCallback((files: FileList | null) => {
-        if (!files || files.length === 0) return;
-        const incoming = Array.from(files);
+    // Append files preserving relativePath and filtering duplicates
+    const appendFiles = useCallback((incoming: File[]) => {
+        if (!incoming || incoming.length === 0) return;
         setSelectedFiles((prev) => {
-            // Filter duplicates by name + size
-            const existingKeys = new Set(prev.map((f) => `${f.name}-${f.size}`));
-            const novel = incoming.filter((f) => !existingKeys.has(`${f.name}-${f.size}`));
+            const existingKeys = new Set(prev.map((f) => `${(f as any).relativePath || f.name}-${f.size}`));
+            const novel = incoming.filter((f) => !existingKeys.has(`${(f as any).relativePath || f.name}-${f.size}`));
             return [...prev, ...novel];
         });
         setError('');
     }, []);
+
+    // Handle file selection (multi-file)
+    const handleFileSelect = useCallback((files: FileList | null) => {
+        if (!files || files.length === 0) return;
+        const scanned = getFilesFromInput(files);
+        appendFiles(scanned.map((s) => s.file));
+    }, [appendFiles]);
+
+    // Handle folder selection
+    const handleFolderSelect = useCallback((files: FileList | null) => {
+        if (!files || files.length === 0) return;
+        const scanned = getFilesFromInput(files);
+        appendFiles(scanned.map((s) => s.file));
+    }, [appendFiles]);
 
     // Remove single file
     const handleRemoveFile = useCallback((index: number) => {
@@ -260,6 +276,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
     const handleClearFiles = useCallback(() => {
         setSelectedFiles([]);
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (folderInputRef.current) folderInputRef.current.value = '';
     }, []);
 
     // Drag and drop handlers
@@ -273,11 +290,14 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         setIsDragging(false);
     }, []);
 
-    const handleDrop = useCallback((e: React.DragEvent) => {
+    const handleDrop = useCallback(async (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
-        handleFileSelect(e.dataTransfer.files);
-    }, [handleFileSelect]);
+        const scanned = await getFilesFromDataTransfer(e.dataTransfer);
+        if (scanned.length > 0) {
+            appendFiles(scanned.map((s) => s.file));
+        }
+    }, [appendFiles]);
 
     // Start hosting selected file(s)
     const handleHost = useCallback(async () => {
@@ -537,7 +557,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
         setZipProgress(null);
 
         try {
-            const files = unpackedFiles.map(f => ({ name: f.name, blob: f.blob }));
+            const files = unpackedFiles.map(f => ({ name: f.name, blob: f.blob, relativePath: f.relativePath }));
             const zipFilename = generateZipFilename();
 
             const zipBlob = await createZip(files, {
@@ -737,8 +757,19 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                         <div className="flex items-center gap-3 min-w-0 flex-1">
                                             <FileIcon fileName={file.name} size="sm" />
                                             <div className="min-w-0 flex-1">
-                                                <p className="text-sm font-semibold text-gray-900 truncate">{file.name}</p>
-                                                <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
+                                                <p className="text-sm font-semibold text-gray-900 truncate" title={file.relativePath || file.name}>{file.name}</p>
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
+                                                    {file.relativePath && file.relativePath.includes('/') && (
+                                                        <span
+                                                            className="inline-flex items-center gap-1 text-[11px] text-blue-600 bg-blue-50/80 px-1.5 py-0.5 border border-blue-200/60 rounded font-mono truncate max-w-[180px]"
+                                                            title={file.relativePath}
+                                                        >
+                                                            <Folder className="w-3 h-3 shrink-0" />
+                                                            <span className="truncate">{file.relativePath.slice(0, file.relativePath.lastIndexOf('/'))}</span>
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
                                         <Button
@@ -936,18 +967,17 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={() => fileInputRef.current?.click()}
                     >
                         <Upload className="w-12 h-12 mx-auto text-blue-500 mb-3" />
                         <p className="font-semibold text-gray-800 mb-1">
                             {selectedFiles.length > 0
-                                ? `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`
-                                : 'Drop file(s) here to host on Swarm'}
+                                ? `${selectedFiles.length} item${selectedFiles.length > 1 ? 's' : ''} selected`
+                                : 'Drop files or folders here to host on Swarm'}
                         </p>
                         <p className="text-sm text-gray-500">
                             {selectedFiles.length > 0
                                 ? `${formatBytes(totalSelectedBytes)} total`
-                                : 'or click to browse from device (multi-file supported)'}
+                                : 'Preserves complete folder directory structures across peers'}
                         </p>
 
                         <input
@@ -957,35 +987,82 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             className="hidden"
                             onChange={(e) => handleFileSelect(e.target.files)}
                         />
+                        <input
+                            ref={folderInputRef}
+                            type="file"
+                            multiple
+                            {...({ webkitdirectory: '', directory: '' } as any)}
+                            className="hidden"
+                            onChange={(e) => handleFolderSelect(e.target.files)}
+                        />
+
+                        <div className="flex flex-wrap items-center justify-center gap-2 mt-3" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                                type="button"
+                                size="sm"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
+                            >
+                                <Upload className="w-3.5 h-3.5" />
+                                Browse Files
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => folderInputRef.current?.click()}
+                                className="border-gray-300 text-gray-700 hover:bg-gray-100 gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
+                            >
+                                <FolderUp className="w-3.5 h-3.5 text-blue-600" />
+                                Browse Folder
+                            </Button>
+                        </div>
 
                         {/* Selected files list */}
                         {selectedFiles.length > 0 && (
                             <div className="mt-4 space-y-2 max-h-48 overflow-y-auto text-left">
-                                {selectedFiles.map((file, idx) => (
-                                    <div
-                                        key={idx}
-                                        className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200"
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                                            <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
-                                            <div className="min-w-0 flex-1">
-                                                <p className="text-xs font-semibold text-gray-900 truncate">{file.name}</p>
-                                                <p className="text-[11px] text-gray-500">{formatBytes(file.size)}</p>
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleRemoveFile(idx);
-                                            }}
-                                            className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-                                            title="Remove file"
+                                {selectedFiles.map((file, idx) => {
+                                    const relPath = (file as any).relativePath as string | undefined;
+                                    const folderPath = relPath && relPath.includes('/')
+                                        ? relPath.slice(0, relPath.lastIndexOf('/'))
+                                        : null;
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl border border-gray-200"
+                                            onClick={(e) => e.stopPropagation()}
                                         >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))}
+                                            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                                <FileIcon fileName={file.name} mimeType={file.type} size="sm" />
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-xs font-semibold text-gray-900 truncate" title={relPath || file.name}>{file.name}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <p className="text-[11px] text-gray-500">{formatBytes(file.size)}</p>
+                                                        {folderPath && (
+                                                            <span
+                                                                className="inline-flex items-center gap-1 text-[10px] text-blue-600 bg-blue-50/80 px-1.5 py-0.2 border border-blue-200/60 rounded font-mono truncate max-w-[180px]"
+                                                                title={relPath}
+                                                            >
+                                                                <Folder className="w-2.5 h-2.5 shrink-0" />
+                                                                <span className="truncate">{folderPath}</span>
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleRemoveFile(idx);
+                                                }}
+                                                className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
+                                                title="Remove file"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
                             </div>
                         )}
 

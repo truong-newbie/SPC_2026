@@ -32,6 +32,7 @@ export interface ReceivedFile {
     blob: Blob;
     checksum?: string;
     checksumVerified?: boolean;
+    relativePath?: string;
 }
 
 export interface ReceiverCallbacks {
@@ -206,6 +207,7 @@ export function createReceiver(cb: ReceiverCallbacks): { handleMessage: (data: s
                     blob,
                     checksum: calculatedChecksum || targetMeta.checksum,
                     checksumVerified,
+                    relativePath: targetMeta.relativePath,
                 };
 
                 partialDownloads.delete(targetMeta.id);

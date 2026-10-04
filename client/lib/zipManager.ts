@@ -11,6 +11,7 @@ import { zip } from 'fflate';
 export interface ZipFile {
     name: string;
     blob: Blob;
+    relativePath?: string;
 }
 
 export interface ZipProgress {
@@ -27,28 +28,38 @@ export interface ZipOptions {
     filename?: string;
 }
 
-// Safe filename: remove invalid characters
-function sanitizeFilename(name: string): string {
-    return name
-        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
-        .replace(/^\.+/, '_')
-        .replace(/\.+$/, '_')
-        .substring(0, 200);
+// Safe path: sanitize directory parts and filename while preserving forward slashes
+function sanitizeZipPath(rawPath: string): string {
+    const normalized = rawPath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+    const parts = normalized.split('/').filter((p) => p.length > 0 && p !== '.' && p !== '..');
+    const safeParts = parts.map((part) => {
+        return part
+            .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+            .replace(/^\.+/, '_')
+            .replace(/\.+$/, '_')
+            .substring(0, 200);
+    });
+    return safeParts.join('/') || 'file';
 }
 
-// Handle duplicate filenames
-function resolveFilename(existing: Set<string>, name: string): string {
-    let finalName = sanitizeFilename(name);
+// Handle duplicate filenames/paths in ZIP
+function resolveZipPath(existing: Set<string>, rawPath: string): string {
+    let finalPath = sanitizeZipPath(rawPath);
     let counter = 1;
-    const ext = finalName.includes('.') ? '.' + finalName.split('.').pop() : '';
-    const base = ext ? finalName.slice(0, -ext.length) : finalName;
 
-    while (existing.has(finalName)) {
-        finalName = `${base} (${counter})${ext}`;
+    const lastSlash = finalPath.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? finalPath.slice(0, lastSlash + 1) : '';
+    const filePart = lastSlash >= 0 ? finalPath.slice(lastSlash + 1) : finalPath;
+
+    const ext = filePart.includes('.') ? '.' + filePart.split('.').pop() : '';
+    const base = ext ? filePart.slice(0, -ext.length) : filePart;
+
+    while (existing.has(finalPath)) {
+        finalPath = `${dir}${base} (${counter})${ext}`;
         counter++;
     }
-    existing.add(finalName);
-    return finalName;
+    existing.add(finalPath);
+    return finalPath;
 }
 
 /**
@@ -73,7 +84,8 @@ export async function createZip(
 
     for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const safeName = resolveFilename(usedNames, file.name);
+        const rawPath = file.relativePath || file.name;
+        const safeName = resolveZipPath(usedNames, rawPath);
 
         // Report progress
         if (onProgress) {
