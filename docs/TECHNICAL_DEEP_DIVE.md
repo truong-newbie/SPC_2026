@@ -397,3 +397,4 @@ pm2 startup
 2. **Về Bảo Mật**: Đạt chuẩn **Zero-Knowledge** thực thụ (chứng minh bằng toán học mã hóa và kiến trúc URL Fragment RFC 3986). Không lưu trữ dữ liệu người dùng, không quét nội dung, tự hủy ngay sau khi nhận.
 3. **Về Khả Năng Mở Rộng**: Cơ chế P2P giải phóng tới 95% chi phí băng thông máy chủ so với mô hình Cloud truyền thống, cho phép hệ thống phục vụ hàng chục nghìn người dùng đồng thời với chi phí hạ tầng máy chủ gần như bằng không.
 4. **Về Trải Nghiệm (UX)**: Chuyển file & thư mục nguyên vẹn 100%, không cần đăng ký tài khoản, quét QR siêu tốc giữa điện thoại và máy tính, tải về trọn gói bằng 1 nút bấm (.zip).
+

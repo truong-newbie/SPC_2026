@@ -70,3 +70,4 @@ export function FileCard({ id, file, relativePath, onDelete, showDelete = true }
         </div>
     );
 }
+

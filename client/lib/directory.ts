@@ -144,3 +144,4 @@ export function getFilesFromInput(files: FileList | null): ScannedFile[] {
         return { file, relativePath };
     });
 }
+
