@@ -595,6 +595,43 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         };
     }, []);
 
+    const getLocalizedStatus = (s: string) => {
+        if (!s) return '';
+        if (s === 'Chọn tệp để bắt đầu gửi') return t('Chọn tệp để bắt đầu gửi', 'Select files to start sending');
+        if (s === 'Đang kết nối vào phòng...') return t('Đang kết nối vào phòng...', 'Connecting to room...');
+        if (s === 'Đã gửi toàn bộ tệp thành công!') return t('Đã gửi toàn bộ tệp thành công!', 'All files sent successfully!');
+        if (s === 'Quá trình truyền tệp thất bại') return t('Quá trình truyền tệp thất bại', 'File transfer failed');
+        if (s === 'Mất kết nối P2P') return t('Mất kết nối P2P', 'Lost P2P connection');
+        if (s === 'Đã ngắt kết nối máy chủ signaling') return t('Đã ngắt kết nối máy chủ signaling', 'Disconnected from signaling server');
+        if (s === 'Đã kết nối lại signaling. Vui lòng thử lại.') return t('Đã kết nối lại signaling. Vui lòng thử lại.', 'Reconnected to signaling. Please try again.');
+        if (s === 'Người nhận đã tham gia. Đang khởi tạo kết nối P2P...') return t('Người nhận đã tham gia. Đang khởi tạo kết nối P2P...', 'Receiver joined. Initializing P2P connection...');
+        if (s === 'Đã kết nối P2P thành công!') return t('Đã kết nối P2P thành công!', 'P2P connected successfully!');
+        if (s === 'Đã kết nối P2P! Vui lòng chọn tệp để bắt đầu gửi...') return t('Đã kết nối P2P! Vui lòng chọn tệp để bắt đầu gửi...', 'P2P connected! Select files to send...');
+        if (s === 'Đã đóng kết nối') return t('Đã đóng kết nối', 'Connection closed');
+        if (s === 'Lỗi kết nối P2P') return t('Lỗi kết nối P2P', 'P2P connection error');
+        if (s === 'Từ chối truy cập') return t('Từ chối truy cập', 'Access denied');
+        if (s === 'Hoàn tất nhận tệp!') return t('Hoàn tất nhận tệp!', 'File received completely!');
+        if (s === 'Đang chờ tệp tiếp theo...') return t('Đang chờ tệp tiếp theo...', 'Waiting for next file...');
+        if (s === 'Đã nhận toàn bộ tệp!') return t('Đã nhận toàn bộ tệp!', 'All files received!');
+        if (s === 'Nhận tệp thất bại') return t('Nhận tệp thất bại', 'Failed to receive file');
+        if (s === 'Lỗi kết nối') return t('Lỗi kết nối', 'Connection error');
+        if (s === 'Đang chờ người nhận kết nối...') return t('Đang chờ người nhận kết nối...', 'Waiting for receiver to connect...');
+        if (s === 'Phòng chia sẻ đã tạo! Thêm tệp để gửi...') return t('Phòng chia sẻ đã tạo! Thêm tệp để gửi...', 'Room created! Add files to send...');
+
+        if (s.startsWith('Đang gửi ') && s.includes('tệp qua P2P...')) {
+            const num = s.match(/\d+/)?.[0] || '';
+            return t(s, `Sending ${num} files via P2P...`);
+        }
+        if (s.startsWith('Đang gửi tệp ')) {
+            return t(s, s.replace('Đang gửi tệp', 'Sending file'));
+        }
+        if (s.startsWith('Đang nhận tệp ')) {
+            return t(s, s.replace('Đang nhận tệp', 'Receiving file'));
+        }
+
+        return s;
+    };
+
     return (
         <div className={className}>
             {/* Receiver Notification */}
@@ -887,7 +924,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
 
                     {/* Transfer Status */}
                     <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-                        <p className="text-center font-semibold text-slate-800 mb-4">{status}</p>
+                        <p className="text-center font-semibold text-slate-800 mb-4">{getLocalizedStatus(status)}</p>
                         {progress > 0 && (
                             <>
                                 <ProgressBar value={progress} className="mb-2" />
@@ -1048,7 +1085,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 <span>{t('Xác thực SHA-256', 'SHA-256 Verified')}</span>
                             </div>
                         </div>
-                        <p className="text-center font-semibold text-slate-800 mb-4">{status}</p>
+                        <p className="text-center font-semibold text-slate-800 mb-4">{getLocalizedStatus(status)}</p>
 
                         {progress > 0 && (
                             <>

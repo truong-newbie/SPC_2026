@@ -622,6 +622,72 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
 
     const totalSelectedBytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
 
+    const getLocalizedStatus = (s: string) => {
+        if (!s) return '';
+        if (s === 'Connect to start') return t('Kết nối để bắt đầu', 'Connect to start');
+        if (s === 'Connected - Select files to host or enter a link to download')
+            return t('Đã kết nối - Chọn tệp để chia sẻ hoặc nhập link để tải', 'Connected - Select files to host or enter a link to download');
+        if (s === 'Disconnected from server') return t('Mất kết nối với máy chủ', 'Disconnected from server');
+        if (s === 'Previewing shared file(s)') return t('Đang xem trước tệp chia sẻ', 'Previewing shared file(s)');
+        if (s === 'Packing files for swarm...') return t('Đang đóng gói tệp cho Swarm...', 'Packing files for swarm...');
+        if (s === 'Previewing shared file(s) - click "Download Now" to start')
+            return t('Đang xem trước tệp - bấm "Tải xuống ngay" để bắt đầu', 'Previewing shared file(s) - click "Download Now" to start');
+        if (s === 'Select files to host or enter a link to download')
+            return t('Chọn tệp để chia sẻ hoặc nhập link để tải', 'Select files to host or enter a link to download');
+        if (s === 'Connecting to swarm peers...') return t('Đang kết nối tới các máy trong mạng Swarm...', 'Connecting to swarm peers...');
+        if (s === 'Download complete! Save your files below.') return t('Tải về hoàn tất! Lưu tệp của bạn bên dưới.', 'Download complete! Save your files below.');
+        if (s === 'Download complete (auto-save ready)') return t('Tải về hoàn tất (sẵn sàng lưu tự động)', 'Download complete (auto-save ready)');
+        if (s === 'Download complete! Seeding to swarm.') return t('Tải về hoàn tất! Đang tiếp sức chia sẻ (Seeding).', 'Download complete! Seeding to swarm.');
+        if (s === 'Stopped hosting') return t('Đã dừng phát tệp', 'Stopped hosting');
+        if (s === 'Download cancelled') return t('Đã hủy tải xuống', 'Download cancelled');
+        if (s === 'Splitting file into pieces...') return t('Đang chia nhỏ tệp thành các mảnh...', 'Splitting file into pieces...');
+        if (s === 'Announcing to swarm...') return t('Đang phát tín hiệu thông báo cho phòng...', 'Announcing to swarm...');
+        if (s === 'Connecting to swarm...') return t('Đang kết nối vào phòng Swarm...', 'Connecting to swarm...');
+        if (s === 'Assembling file...') return t('Đang ghép các mảnh tệp hoàn chỉnh...', 'Assembling file...');
+
+        if (s.startsWith('Seeding ') && s.includes('file(s) to swarm')) {
+            const count = s.match(/\d+/)?.[0] || '1';
+            return t(`Đang phát ${count} tệp cho mạng Swarm`, s);
+        }
+        if (s.startsWith('Seeding ') && s.includes('pieces')) {
+            const count = s.match(/\d+/)?.[0] || '';
+            return t(`Đang phát ${count} mảnh dữ liệu`, s);
+        }
+        if (s.startsWith('Connected to peer ')) {
+            const id = s.replace('Connected to peer ', '');
+            return t(`Đã kết nối với máy ${id}`, s);
+        }
+        if (s.startsWith('Peer discovered: ')) {
+            const id = s.replace('Peer discovered: ', '');
+            return t(`Tìm thấy máy mới: ${id}`, s);
+        }
+        if (s.startsWith('Peer left: ')) {
+            const id = s.replace('Peer left: ', '');
+            return t(`Máy đã rời phòng: ${id}`, s);
+        }
+        if (s.startsWith('Downloading piece ')) {
+            return t(s.replace('Downloading piece ', 'Đang tải mảnh '), s);
+        }
+        if (s.startsWith('Downloading: ')) {
+            return t(s.replace('Downloading: ', 'Tiến trình tải: ').replace('pieces', 'mảnh'), s);
+        }
+
+        return s;
+    };
+
+    const getLocalizedError = (e: string) => {
+        if (!e) return '';
+        if (e === 'Connection failed. Server may be offline.')
+            return t('Kết nối thất bại. Máy chủ có thể đang offline.', 'Connection failed. Server may be offline.');
+        if (e === 'Invalid swarm link or ID')
+            return t('Liên kết hoặc mã phòng Swarm không hợp lệ', 'Invalid swarm link or ID');
+        if (e.startsWith('Failed to host: '))
+            return t(`Không thể khởi tạo trạm phát: ${e.replace('Failed to host: ', '')}`, e);
+        if (e.startsWith('Failed to create ZIP: '))
+            return t(`Không thể tạo file ZIP: ${e.replace('Failed to create ZIP: ', '')}`, e);
+        return e;
+    };
+
     return (
         <div className={`p-6 max-w-2xl mx-auto ${className || ''}`}>
             {/* Header */}
@@ -648,7 +714,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                 <div className="flex items-center justify-between text-sm">
                     <div className="flex items-center gap-2 font-medium text-gray-700">
                         <Radio className="w-4 h-4 text-blue-500 animate-pulse" />
-                        <span className="truncate max-w-xs">{status}</span>
+                        <span className="truncate max-w-xs">{getLocalizedStatus(status)}</span>
                     </div>
                     <div className="flex items-center gap-4 text-sm font-semibold">
                         <div className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
@@ -664,7 +730,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                 {error && (
                     <div className="flex items-center gap-2 text-sm text-red-600 pt-2 border-t border-gray-200">
                         <XCircle className="w-4 h-4 shrink-0" />
-                        <span>{error}</span>
+                        <span>{getLocalizedError(error)}</span>
                     </div>
                 )}
             </div>
