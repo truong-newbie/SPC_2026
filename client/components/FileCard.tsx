@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Button } from './Button';
 import { FileIcon } from './FileIcon';
 import { getFileTypeMeta } from '@/lib/fileType';
+import { useLanguage } from '@/lib/i18n';
 
 interface FileCardProps {
     id: string;
@@ -16,6 +17,7 @@ interface FileCardProps {
 }
 
 export function FileCard({ id, file, relativePath, onDelete, showDelete = true }: FileCardProps) {
+    const { t } = useLanguage();
     const meta = getFileTypeMeta(file.name, file.type);
     const folderPath = relativePath && relativePath.includes('/')
         ? relativePath.slice(0, relativePath.lastIndexOf('/'))
@@ -62,7 +64,7 @@ export function FileCard({ id, file, relativePath, onDelete, showDelete = true }
                     size="icon"
                     onClick={() => onDelete(id)}
                     className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Xóa tệp này"
+                    title={t('Xóa tệp này', 'Remove this file')}
                 >
                     <X className="h-4 w-4" />
                 </Button>

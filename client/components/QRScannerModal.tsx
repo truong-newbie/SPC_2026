@@ -5,6 +5,7 @@ import { Camera, X, RefreshCw, AlertCircle, Upload, CheckCircle2, Link2 } from '
 import { Button } from './Button';
 import { soundManager } from '@/lib/audio';
 import jsQR from 'jsqr';
+import { useLanguage } from '@/lib/i18n';
 
 interface QRScannerModalProps {
     isOpen: boolean;
@@ -13,6 +14,7 @@ interface QRScannerModalProps {
 }
 
 export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps) {
+    const { t } = useLanguage();
     const videoRef = useRef<HTMLVideoElement | null>(null);
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const [cameraError, setCameraError] = useState<string>('');
@@ -183,7 +185,9 @@ export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps)
                         <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
                             <Camera className="w-4 h-4" />
                         </div>
-                        <h3 className="font-bold text-sm text-slate-800">Quét mã QR nhận tệp</h3>
+                        <h3 className="font-bold text-sm text-slate-800">
+                            {t('Quét mã QR nhận tệp', 'Scan QR Code to Receive Files')}
+                        </h3>
                     </div>
                     <button
                         onClick={onClose}
@@ -200,7 +204,7 @@ export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps)
                             <AlertCircle className="w-10 h-10 text-amber-400 mx-auto" />
                             <p className="text-xs sm:text-sm font-medium">{cameraError}</p>
                             <p className="text-xs text-slate-400">
-                                Bạn có thể tải ảnh chụp mã QR từ máy hoặc dán link phòng bên dưới.
+                                {t('Bạn có thể tải ảnh chụp mã QR từ máy hoặc dán link phòng bên dưới.', 'You can upload a QR image from your device or paste the room link below.')}
                             </p>
                         </div>
                     ) : (
@@ -246,7 +250,7 @@ export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps)
                                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold transition-colors"
                             >
                                 <Upload className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Chọn ảnh QR</span>
+                                <span>{t('Chọn ảnh QR', 'Upload QR Image')}</span>
                             </button>
                             <input
                                 ref={fileInputRef}
@@ -266,13 +270,13 @@ export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps)
                                     className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 font-semibold transition-colors"
                                 >
                                     <RefreshCw className="w-3.5 h-3.5" />
-                                    <span>Đổi camera</span>
+                                    <span>{t('Đổi camera', 'Flip Camera')}</span>
                                 </button>
                             )}
                         </div>
 
                         <Button onClick={onClose} variant="outline" size="sm">
-                            Đóng
+                            {t('Đóng', 'Close')}
                         </Button>
                     </div>
 
@@ -280,13 +284,13 @@ export function QRScannerModal({ isOpen, onClose, onScan }: QRScannerModalProps)
                     <form onSubmit={handleManualSubmit} className="flex gap-2 pt-1 border-t border-slate-200/60">
                         <input
                             type="text"
-                            placeholder="Hoặc dán liên kết / mã phòng tại đây..."
+                            placeholder={t('Hoặc dán liên kết / mã phòng tại đây...', 'Or paste room link / code here...')}
                             value={manualCode}
                             onChange={(e) => setManualCode(e.target.value)}
                             className="flex-1 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
                         <Button type="submit" size="sm" disabled={!manualCode.trim()} className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 text-xs">
-                            Kết nối
+                            {t('Kết nối', 'Connect')}
                         </Button>
                     </form>
                 </div>

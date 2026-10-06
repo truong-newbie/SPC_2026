@@ -42,6 +42,7 @@ import {
     decryptData,
     generateSecurePassword,
 } from '@/lib/crypto/e2ee';
+import { useLanguage } from '@/lib/i18n';
 
 interface StoredTransferProps {
     className?: string;
@@ -76,6 +77,7 @@ function getApiBaseUrl(): string {
 }
 
 export default function StoredTransfer({ className }: StoredTransferProps) {
+    const { t, isVi } = useLanguage();
     // ---------------------------------------------------------------------------
     // Mode & Receiver Params Detection
     // ---------------------------------------------------------------------------
@@ -246,14 +248,14 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     // - File lớn (> 100MB): Tự động gán 2 giờ (tiết kiệm ổ cứng server)
     const MB = 1024 * 1024;
     let autoTtlHours = 24;
-    let sizeCategory = 'Tệp nhỏ (< 20MB)';
+    let sizeCategory = t('Tệp nhỏ (< 20MB)', 'Small bundle (< 20MB)');
 
     if (totalSelectedBytes > 100 * MB) {
         autoTtlHours = 2;
-        sizeCategory = 'Tệp lớn (> 100MB)';
+        sizeCategory = t('Tệp lớn (> 100MB)', 'Large bundle (> 100MB)');
     } else if (totalSelectedBytes > 20 * MB) {
         autoTtlHours = 6;
-        sizeCategory = 'Tệp trung bình (20MB - 100MB)';
+        sizeCategory = t('Tệp trung bình (20MB - 100MB)', 'Medium bundle (20MB - 100MB)');
     }
 
     // Auto-sync ttlHours to dynamic policy
@@ -266,15 +268,15 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     // ---------------------------------------------------------------------------
     const handleUploadAndStore = async () => {
         if (selectedFiles.length === 0) {
-            setUploadError('Vui lòng chọn ít nhất 1 file để lưu tạm.');
+            setUploadError(t('Vui lòng chọn ít nhất 1 file để lưu tạm.', 'Please select at least 1 file.'));
             return;
         }
         if (totalSelectedBytes > MAX_STORAGE_BYTES) {
-            setUploadError(`Tổng dung lượng (${formatBytes(totalSelectedBytes)}) vượt quá mức tối đa 500 MB.`);
+            setUploadError(t(`Tổng dung lượng (${formatBytes(totalSelectedBytes)}) vượt quá mức tối đa 500 MB.`, `Total size (${formatBytes(totalSelectedBytes)}) exceeds the 500 MB maximum.`));
             return;
         }
         if (!senderPassword.trim()) {
-            setUploadError('Vui lòng nhập hoặc tạo mật khẩu mã hóa.');
+            setUploadError(t('Vui lòng nhập hoặc tạo mật khẩu mã hóa.', 'Please enter or generate an encryption password.'));
             return;
         }
 
@@ -284,15 +286,15 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
 
         try {
             // 1. Pack files
-            setUploadPhase('Đang đóng gói tập tin...');
+            setUploadPhase(t('Đang đóng gói tập tin...', 'Packing files...'));
             const packResult = await packFiles(selectedFiles);
 
             // 2. Encrypt with AES-256-GCM via Web Crypto
-            setUploadPhase('Đang mã hóa AES-256-GCM (Zero-Knowledge)...');
+            setUploadPhase(t('Đang mã hóa AES-256-GCM (Zero-Knowledge)...', 'Encrypting AES-256-GCM (Zero-Knowledge)...'));
             const encryptionResult = await encryptData(packResult.buffer, senderPassword.trim());
 
             // 3. Upload stream
-            setUploadPhase('Đang tải lên server lưu tạm...');
+            setUploadPhase(t('Đang tải lên server lưu tạm...', 'Uploading encrypted file to server...'));
             const fileId = uuidv4();
             const apiBase = getApiBaseUrl();
 
@@ -507,13 +509,15 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
     // Helper: Format Expiration Time Remaining
     const formatTimeRemaining = (expiresAt: number) => {
         const diff = expiresAt - Date.now();
-        if (diff <= 0) return 'Đã hết hạn';
+        if (diff <= 0) return t('Đã hết hạn', 'Expired');
         const hours = Math.floor(diff / (3600 * 1000));
         const minutes = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
         if (hours > 0) {
-            return `Còn ${hours} giờ ${minutes} phút (Hết hạn lúc: ${new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
+            return isVi
+                ? `Còn ${hours} giờ ${minutes} phút (Hết hạn lúc: ${new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`
+                : `${hours}h ${minutes}m left (Expires: ${new Date(expiresAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})`;
         }
-        return `Còn ${minutes} phút`;
+        return isVi ? `Còn ${minutes} phút` : `${minutes}m left`;
     };
 
     // ---------------------------------------------------------------------------
@@ -533,7 +537,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
                     >
                         <ArrowLeft className="w-4 h-4" />
-                        Trở về trang chủ gửi file
+                        {t('Trở về trang chủ gửi file', 'Back to file sharing home')}
                     </button>
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
                         <ShieldCheck className="w-3.5 h-3.5" />
@@ -544,23 +548,23 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                 {isLoadingMeta ? (
                     <div className="bg-card border rounded-2xl p-12 text-center space-y-4 shadow-sm">
                         <Loader2 className="w-10 h-10 animate-spin text-primary mx-auto" />
-                        <p className="text-muted-foreground">Đang lấy thông tin bảo mật của file...</p>
+                        <p className="text-muted-foreground">{t('Đang lấy thông tin bảo mật của file...', 'Fetching file security details...')}</p>
                     </div>
                 ) : metaError ? (
                     <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-8 text-center space-y-4">
                         <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-                        <h3 className="text-lg font-semibold text-destructive">Không thể mở file</h3>
+                        <h3 className="text-lg font-semibold text-destructive">{t('Không thể mở file', 'Unable to open file')}</h3>
                         <p className="text-sm text-muted-foreground max-w-md mx-auto">{metaError}</p>
                         <Button
                             onClick={() => {
                                 if (typeof window !== 'undefined') {
-                                    window.location.href = window.location.origin;
+                                window.location.href = window.location.origin;
                                 }
                             }}
                             variant="outline"
                             className="mt-2"
                         >
-                            Gửi hoặc tải file mới
+                            {t('Gửi hoặc tải file mới', 'Send or download new file')}
                         </Button>
                     </div>
                 ) : previewMeta ? (
@@ -570,7 +574,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             <div className="flex items-start justify-between gap-4">
                                 <div className="space-y-1">
                                     <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                        File lưu tạm được mã hóa
+                                        {t('File lưu tạm được mã hóa', 'Encrypted stored file')}
                                     </span>
                                     <h2 className="text-xl md:text-2xl font-bold break-all">
                                         {previewMeta.fileName}
@@ -586,7 +590,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40 border text-xs">
                                     <HardDrive className="w-4 h-4 text-muted-foreground shrink-0" />
                                     <div>
-                                        <div className="text-muted-foreground">Dung lượng</div>
+                                        <div className="text-muted-foreground">{t('Dung lượng', 'Size')}</div>
                                         <div className="font-semibold text-foreground">
                                             {formatBytes(previewMeta.fileSize || previewMeta.cipherSize)}
                                         </div>
@@ -595,7 +599,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40 border text-xs">
                                     <Clock className="w-4 h-4 text-amber-500 shrink-0" />
                                     <div>
-                                        <div className="text-muted-foreground">Thời hạn lưu</div>
+                                        <div className="text-muted-foreground">{t('Thời hạn lưu', 'Expires in')}</div>
                                         <div className="font-semibold text-foreground">
                                             {formatTimeRemaining(previewMeta.expiresAt)}
                                         </div>
@@ -604,9 +608,9 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/40 border text-xs">
                                     <Flame className={`w-4 h-4 shrink-0 ${previewMeta.burnAfterReading ? 'text-rose-500' : 'text-muted-foreground'}`} />
                                     <div>
-                                        <div className="text-muted-foreground">Tự hủy sau tải</div>
+                                        <div className="text-muted-foreground">{t('Tự hủy sau tải', 'Burn after download')}</div>
                                         <div className="font-semibold text-foreground">
-                                            {previewMeta.burnAfterReading ? 'Có (1 lần tải duy nhất)' : 'Không'}
+                                            {previewMeta.burnAfterReading ? t('Có (1 lần tải duy nhất)', 'Yes (1-time download)') : t('Không', 'No')}
                                         </div>
                                     </div>
                                 </div>
@@ -616,7 +620,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <div className="flex items-center gap-2 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 px-3 py-2 rounded-lg">
                                     <Flame className="w-4 h-4 shrink-0" />
                                     <span>
-                                        <strong>Lưu ý:</strong> File này được cài đặt tự hủy vĩnh viễn trên máy chủ ngay sau khi bạn tải xong lần đầu tiên.
+                                        <strong>{t('Lưu ý:', 'Notice:')}</strong> {t('File này được cài đặt tự hủy vĩnh viễn trên máy chủ ngay sau khi bạn tải xong lần đầu tiên.', 'This file is set to permanently self-destruct from the server after the first download.')}
                                     </span>
                                 </div>
                             )}
@@ -629,12 +633,12 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     <label className="text-sm font-medium flex items-center justify-between">
                                         <span className="flex items-center gap-1.5">
                                             <Lock className="w-4 h-4 text-primary" />
-                                            Mật khẩu giải mã file:
+                                            {t('Mật khẩu giải mã file:', 'Decryption password:')}
                                         </span>
                                         {receiverHashKey && (
                                             <span className="text-xs text-emerald-500 flex items-center gap-1">
                                                 <Check className="w-3 h-3" />
-                                                Đã nhận diện từ liên kết
+                                                {t('Đã nhận diện từ liên kết', 'Auto-filled from link')}
                                             </span>
                                         )}
                                     </label>
@@ -646,7 +650,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                                 setReceiverPassword(e.target.value);
                                                 setDownloadError('');
                                             }}
-                                            placeholder="Nhập mật khẩu do người gửi cung cấp..."
+                                            placeholder={t('Nhập mật khẩu do người gửi cung cấp...', 'Enter password provided by sender...')}
                                             className="w-full pl-4 pr-10 py-2.5 rounded-lg border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                                         />
                                         <button
@@ -662,7 +666,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                         </button>
                                     </div>
                                     <p className="text-xs text-muted-foreground">
-                                        Mật khẩu là chìa khóa để giải mã trực tiếp trên trình duyệt của bạn (Server không lưu mật khẩu này).
+                                        {t('Mật khẩu là chìa khóa để giải mã trực tiếp trên trình duyệt của bạn (Server không lưu mật khẩu này).', 'The password decrypts files locally in your browser (never stored on server).')}
                                     </p>
                                 </div>
 
@@ -693,12 +697,12 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     {isDownloading ? (
                                         <>
                                             <Loader2 className="w-5 h-5 animate-spin" />
-                                            Đang xử lý tải & giải mã...
+                                            {t('Đang xử lý tải & giải mã...', 'Downloading & decrypting...')}
                                         </>
                                     ) : (
                                         <>
                                             <Download className="w-5 h-5" />
-                                            Tải xuống & Giải mã an toàn
+                                            {t('Tải xuống & Giải mã an toàn', 'Download & Decrypt Securely')}
                                         </>
                                     )}
                                 </Button>
@@ -709,12 +713,12 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 flex items-center gap-3">
                                     <CheckCircle2 className="w-6 h-6 shrink-0" />
                                     <div className="text-sm">
-                                        <div className="font-semibold">Giải mã thành công!</div>
+                                        <div className="font-semibold">{t('Giải mã thành công!', 'Decrypted successfully!')}</div>
                                         <div className="text-xs opacity-90">
                                             {downloadedFiles.length === 1
-                                                ? 'File đã được tải xuống máy tính của bạn.'
-                                                : `Đã mở gói ${downloadedFiles.length} tập tin.`}
-                                            {isBurned && ' File đã tự hủy trên server theo cấu hình của người gửi.'}
+                                                ? t('File đã được tải xuống máy tính của bạn.', 'File has been downloaded to your computer.')
+                                                : t(`Đã mở gói ${downloadedFiles.length} tập tin.`, `Extracted ${downloadedFiles.length} files.`)}
+                                            {isBurned && t(' File đã tự hủy trên server theo cấu hình của người gửi.', ' File was burned from server as configured.')}
                                         </div>
                                     </div>
                                 </div>
@@ -722,7 +726,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 {/* List of unpacked files */}
                                 <div className="space-y-2">
                                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                                        Danh sách tập tin ({downloadedFiles.length})
+                                        {t('Danh sách tập tin', 'File list')} ({downloadedFiles.length})
                                     </div>
                                     <div className="divide-y border rounded-xl overflow-hidden bg-background">
                                         {downloadedFiles.map((file, idx) => (
@@ -757,7 +761,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                                     className="shrink-0 flex items-center gap-1.5"
                                                 >
                                                     <Download className="w-3.5 h-3.5" />
-                                                    Lưu file
+                                                    {t('Lưu file', 'Save file')}
                                                 </Button>
                                             </div>
                                         ))}
@@ -774,12 +778,12 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                         {isZipping ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 animate-spin" />
-                                                <span>Đang đóng gói ZIP ({zipProgress ? `${zipProgress.percent}%` : '...'})</span>
+                                                <span>{t('Đang đóng gói ZIP', 'Creating ZIP archive')} ({zipProgress ? `${zipProgress.percent}%` : '...'})</span>
                                             </>
                                         ) : (
                                             <>
                                                 <Archive className="w-4 h-4" />
-                                                <span>Tải toàn bộ {downloadedFiles.length} file (.zip)</span>
+                                                <span>{t(`Tải toàn bộ ${downloadedFiles.length} file (.zip)`, `Download all ${downloadedFiles.length} files (.zip)`)}</span>
                                             </>
                                         )}
                                     </Button>
@@ -804,11 +808,13 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                     Zero-Knowledge E2EE Server Storage
                 </div>
                 <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-                    Lưu tạm file trên Server (Mã hóa E2EE)
+                    {t('Lưu tạm file trên Server (Mã hóa E2EE)', 'Secure Encrypted Server Storage (E2EE)')}
                 </h1>
                 <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-                    File được mã hóa AES-256 trực tiếp trên trình duyệt của bạn trước khi đưa lên server.
-                    Server chỉ lưu bản mã, <strong>không thể xem trộm nội dung</strong> vì mật khẩu do bạn nắm giữ.
+                    {t(
+                        'File được mã hóa AES-256 trực tiếp trên trình duyệt của bạn trước khi đưa lên server. Server chỉ lưu bản mã, không thể xem trộm nội dung vì mật khẩu do bạn nắm giữ.',
+                        'Files are AES-256 encrypted in your browser before upload. The server only stores ciphertext and cannot inspect files as you hold the encryption key.'
+                    )}
                 </p>
             </div>
 
@@ -818,9 +824,9 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                     <div className="flex items-center gap-3 p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-500">
                         <CheckCircle2 className="w-6 h-6 shrink-0" />
                         <div>
-                            <div className="font-semibold text-sm">Đã tải lên và mã hóa an toàn!</div>
+                            <div className="font-semibold text-sm">{t('Đã tải lên và mã hóa an toàn!', 'Uploaded & Encrypted Securely!')}</div>
                             <div className="text-xs opacity-90">
-                                File đang được lưu tạm trên server và sẵn sàng để gửi cho người nhận.
+                                {t('File đang được lưu tạm trên server và sẵn sàng để gửi cho người nhận.', 'Files are temporarily preserved on the server and ready to be downloaded.')}
                             </div>
                         </div>
                     </div>
@@ -828,21 +834,21 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                     {/* File summary */}
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="p-3 rounded-lg bg-muted/40 border text-xs">
-                            <span className="text-muted-foreground">Tập tin:</span>
+                            <span className="text-muted-foreground">{t('Tập tin:', 'File:')}</span>
                             <div className="font-semibold text-foreground truncate mt-0.5">
                                 {uploadResult.fileName}
                             </div>
                         </div>
                         <div className="p-3 rounded-lg bg-muted/40 border text-xs">
-                            <span className="text-muted-foreground">Thời hạn tự hủy:</span>
+                            <span className="text-muted-foreground">{t('Thời hạn tự hủy:', 'Expires in:')}</span>
                             <div className="font-semibold text-foreground mt-0.5">
                                 {formatTimeRemaining(uploadResult.expiresAt)}
                             </div>
                         </div>
                         <div className="p-3 rounded-lg bg-muted/40 border text-xs">
-                            <span className="text-muted-foreground">Chế độ tự hủy:</span>
+                            <span className="text-muted-foreground">{t('Chế độ tự hủy:', 'Auto-burn mode:')}</span>
                             <div className="font-semibold text-foreground mt-0.5">
-                                {uploadResult.burnAfterReading ? 'Tự xóa sau 1 lần tải' : 'Theo thời hạn TTL'}
+                                {uploadResult.burnAfterReading ? t('Tự xóa sau 1 lần tải', 'Burn after 1 download') : t('Theo thời hạn TTL', 'TTL expiration')}
                             </div>
                         </div>
                     </div>
@@ -851,7 +857,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                     <div className="space-y-4">
                         <div className="space-y-1.5">
                             <label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                Liên kết chia sẻ (Tự động mở khóa cho người nhận):
+                                {t('Liên kết chia sẻ (Tự động mở khóa cho người nhận):', 'Share Link (Auto-unlocks for recipient):')}
                             </label>
                             <div className="flex items-center gap-2">
                                 <input
@@ -870,11 +876,11 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     className="flex items-center gap-1.5 shrink-0"
                                 >
                                     {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                                    {copiedLink ? 'Đã chép' : 'Sao chép link'}
+                                    {copiedLink ? t('Đã chép', 'Copied') : t('Sao chép link', 'Copy Link')}
                                 </Button>
                             </div>
                             <p className="text-[11px] text-muted-foreground">
-                                Liên kết này chứa mật khẩu ở đuôi URL fragment (#), trình duyệt người nhận sẽ tự động giải mã.
+                                {t('Liên kết này chứa mật khẩu ở đuôi URL fragment (#), trình duyệt người nhận sẽ tự động giải mã.', 'This link embeds the encryption key in the URL hash (#) so receiver auto-decrypts without typing.')}
                             </p>
                         </div>
 
@@ -883,7 +889,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             <div className="flex items-center justify-between text-xs">
                                 <span className="font-medium flex items-center gap-1.5">
                                     <Key className="w-3.5 h-3.5 text-primary" />
-                                    Mật khẩu mã hóa riêng (nếu muốn gửi tách biệt):
+                                    {t('Mật khẩu mã hóa riêng (nếu muốn gửi tách biệt):', 'Decryption password (if sent separately):')}
                                 </span>
                                 <button
                                     onClick={() => {
@@ -893,8 +899,8 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     }}
                                     className="text-primary hover:underline text-xs flex items-center gap-1"
                                 >
-                                    {copiedPass ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
-                                    {copiedPass ? 'Đã sao chép' : 'Chép mật khẩu'}
+                                    {copiedPass ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                                    {copiedPass ? t('Đã sao chép', 'Copied') : t('Chép mật khẩu', 'Copy Password')}
                                 </button>
                             </div>
                             <div className="font-mono text-sm font-bold tracking-wider bg-background px-3 py-2 rounded-lg border border-dashed text-center">
@@ -908,7 +914,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <QRCodeSVG value={uploadResult.shareLink} size={140} />
                             </div>
                             <span className="text-xs text-muted-foreground">
-                                Quét mã QR bằng điện thoại để tải file
+                                {t('Quét mã QR bằng điện thoại để tải file', 'Scan QR code with phone to download')}
                             </span>
                         </div>
                     </div>
@@ -924,7 +930,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             }}
                             className="flex-1"
                         >
-                            Tải lên tập tin khác
+                            {t('Tải lên tập tin khác', 'Upload another file')}
                         </Button>
                         <Button
                             variant="ghost"
@@ -932,7 +938,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             className="text-destructive hover:bg-destructive/10 hover:text-destructive flex items-center justify-center gap-1.5"
                         >
                             <Trash2 className="w-4 h-4" />
-                            Xóa file khỏi server ngay
+                            {t('Xóa file khỏi server ngay', 'Delete from server now')}
                         </Button>
                     </div>
                 </div>
@@ -971,10 +977,10 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             </div>
                             <div>
                                 <p className="text-sm font-semibold text-foreground">
-                                    Kéo thả tệp hoặc thư mục vào đây
+                                    {t('Kéo thả tệp hoặc thư mục vào đây', 'Drag & drop files or folders here')}
                                 </p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Hỗ trợ chọn nhiều tệp và cả thư mục cùng lúc. Tối đa 500 MB cho mỗi gói file.
+                                    {t('Hỗ trợ chọn nhiều tệp và cả thư mục cùng lúc. Tối đa 500 MB cho mỗi gói file.', 'Supports multiple files and entire folders. Up to 500 MB per bundle.')}
                                 </p>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
@@ -985,7 +991,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
                                 >
                                     <Upload className="w-3.5 h-3.5" />
-                                    Chọn tệp
+                                    {t('Chọn tệp', 'Choose files')}
                                 </Button>
                                 <Button
                                     type="button"
@@ -995,7 +1001,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     className="border-slate-300 text-slate-700 hover:bg-slate-100 gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
                                 >
                                     <FolderUp className="w-3.5 h-3.5 text-blue-600" />
-                                    Chọn thư mục
+                                    {t('Chọn thư mục', 'Choose folder')}
                                 </Button>
                             </div>
                         </div>
@@ -1006,13 +1012,13 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                         <div className="space-y-3">
                             <div className="flex items-center justify-between text-xs">
                                 <span className="font-semibold text-muted-foreground uppercase tracking-wider">
-                                    Đã chọn {selectedFiles.length} file ({formatBytes(totalSelectedBytes)})
+                                    {t(`Đã chọn ${selectedFiles.length} file`, `Selected ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}`)} ({formatBytes(totalSelectedBytes)})
                                 </span>
                                 <button
                                     onClick={clearFiles}
                                     className="text-destructive hover:underline text-xs"
                                 >
-                                    Xóa tất cả
+                                    {t('Xóa tất cả', 'Clear all')}
                                 </button>
                             </div>
                             <div className="max-h-48 overflow-y-auto divide-y border rounded-xl bg-background">
@@ -1065,7 +1071,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                     <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3.5 space-y-2.5">
                         <div className="flex items-center gap-2 text-xs font-bold text-slate-800 uppercase tracking-wider">
                             <ShieldCheck className="w-4 h-4 text-blue-600" />
-                            <span>Chính sách lưu trữ & Tự hủy bảo mật</span>
+                            <span>{t('Chính sách lưu trữ & Tự hủy bảo mật', 'Storage & Auto-Burn Policy')}</span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1074,13 +1080,13 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <Clock className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                                 <div className="space-y-0.5 text-xs">
                                     <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
-                                        <span>Thời hạn lưu tạm:</span>
+                                        <span>{t('Thời hạn lưu tạm:', 'Storage expiration:')}</span>
                                         <span className="font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
-                                            {autoTtlHours} giờ
+                                            {autoTtlHours} {t('giờ', 'hours')}
                                         </span>
                                     </div>
                                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                                        {sizeCategory}. Tệp sẽ tự động hủy nếu người nhận không tải trước hạn chót.
+                                        {sizeCategory}. {t('Tệp sẽ tự động hủy nếu người nhận không tải trước hạn chót.', 'Files will automatically self-destruct if not downloaded before deadline.')}
                                     </p>
                                 </div>
                             </div>
@@ -1090,13 +1096,13 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 <Flame className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
                                 <div className="space-y-0.5 text-xs">
                                     <div className="font-semibold text-slate-800 flex items-center gap-1.5 flex-wrap">
-                                        <span>Tự hủy sau khi tải:</span>
+                                        <span>{t('Tự hủy sau khi tải:', 'Burn after download:')}</span>
                                         <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                                            Luôn bật
+                                            {t('Luôn bật', 'Always On')}
                                         </span>
                                     </div>
                                     <p className="text-[11px] text-slate-500 leading-relaxed">
-                                        Xóa vĩnh viễn khỏi máy chủ ngay khi tải xong 100%, bảo vệ tuyệt đối quyền riêng tư.
+                                        {t('Xóa vĩnh viễn khỏi máy chủ ngay khi tải xong 100%, bảo vệ tuyệt đối quyền riêng tư.', 'Permanently deleted from server upon complete download, ensuring absolute privacy.')}
                                     </p>
                                 </div>
                             </div>
@@ -1108,7 +1114,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                             <div className="flex items-center justify-between text-xs">
                                 <label className="font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                                     <Lock className="w-3.5 h-3.5 text-primary" />
-                                    Mật khẩu mã hóa E2EE:
+                                    {t('Mật khẩu mã hóa E2EE:', 'E2EE Encryption Password:')}
                                 </label>
                                 <button
                                     type="button"
@@ -1116,7 +1122,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     className="text-primary hover:underline text-xs flex items-center gap-1"
                                 >
                                     <RefreshCw className="w-3 h-3" />
-                                    Tạo mật khẩu ngẫu nhiên mới
+                                    {t('Tạo mật khẩu ngẫu nhiên mới', 'Generate random password')}
                                 </button>
                             </div>
                             <div className="relative">
@@ -1124,7 +1130,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                     type={showSenderPassword ? 'text' : 'password'}
                                     value={senderPassword}
                                     onChange={(e) => setSenderPassword(e.target.value)}
-                                    placeholder="Nhập hoặc để mật khẩu tự tạo..."
+                                    placeholder={t('Nhập hoặc để mật khẩu tự tạo...', 'Enter or use auto-generated password...')}
                                     className="w-full pl-4 pr-10 py-2.5 rounded-lg border bg-background text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary"
                                 />
                                 <button
@@ -1140,7 +1146,7 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                                 </button>
                             </div>
                             <p className="text-[11px] text-muted-foreground">
-                                Mật khẩu này được dùng để mã hóa bằng thuật toán AES-256-GCM trên máy bạn. Server không bao giờ nhận được mật khẩu này.
+                                {t('Mật khẩu này được dùng để mã hóa bằng thuật toán AES-256-GCM trên máy bạn. Server không bao giờ nhận được mật khẩu này.', 'This password is used to encrypt files with AES-256-GCM locally. The server never receives this password.')}
                             </p>
                         </div>
                     </div>
@@ -1173,12 +1179,12 @@ export default function StoredTransfer({ className }: StoredTransferProps) {
                         {isUploading ? (
                             <>
                                 <Loader2 className="w-5 h-5 animate-spin" />
-                                Đang mã hóa & tải lên...
+                                {t('Đang mã hóa & tải lên...', 'Encrypting & uploading...')}
                             </>
                         ) : (
                             <>
                                 <ShieldCheck className="w-5 h-5" />
-                                Mã hóa & Lưu tạm lên Server ({formatBytes(totalSelectedBytes)})
+                                {t('Mã hóa & Lưu tạm lên Server', 'Encrypt & Store on Server')} ({formatBytes(totalSelectedBytes)})
                             </>
                         )}
                     </Button>

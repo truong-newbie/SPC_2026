@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import GoogleAnalytics from '@/components/GoogleAnalytics';
+import { LanguageProvider } from '@/lib/i18n';
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://filebridge.click'),
@@ -122,7 +123,9 @@ export default function RootLayout({
       </head>
       <body className="light-bg text-slate-700 min-h-screen flex flex-col font-sans antialiased selection:bg-blue-100 selection:text-blue-900 relative">
         <GoogleAnalytics />
-        {children}
+        <LanguageProvider>
+          {children}
+        </LanguageProvider>
       </body>
     </html>
   );

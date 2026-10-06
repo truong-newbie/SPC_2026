@@ -52,12 +52,14 @@ import {
     FolderUp,
 } from 'lucide-react';
 import { createZip, generateZipFilename, shouldZipAll, type ZipProgress } from '@/lib/zipManager';
+import { useLanguage } from '@/lib/i18n';
 
 interface P2PTransferProps {
     className?: string;
 }
 
 export default function P2PTransfer({ className }: P2PTransferProps) {
+    const { t, isVi } = useLanguage();
     // Room and role detection with reactive hash listener
     const [activeRoomId, setActiveRoomId] = useState<string | null>(() => {
         return typeof window !== 'undefined' ? getRoomFromUrl(window.location.hash, window.location.search) : null;
@@ -99,13 +101,15 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
         if (progress > 0 && progress < 100) {
             const fileLabel = currentFileName ? ` ${currentFileName}` : '';
             const speedLabel = transferSpeed ? ` (${transferSpeed})` : '';
-            document.title = `[${Math.round(progress)}%] Đang truyền${fileLabel}${speedLabel} — FileBridge`;
+            document.title = `[${Math.round(progress)}%] ${isVi ? 'Đang truyền' : 'Transferring'}${fileLabel}${speedLabel} — FileBridge`;
         } else if (progress === 100) {
-            document.title = `[Hoàn thành] Đã truyền tệp xong — FileBridge`;
+            document.title = `[${isVi ? 'Hoàn thành' : 'Completed'}] ${isVi ? 'Đã truyền tệp xong' : 'Transfer finished'} — FileBridge`;
         } else {
-            document.title = 'FileBridge — Truyền tệp P2P & Lưu trữ E2EE Zero-Knowledge (SPC 2026)';
+            document.title = isVi
+                ? 'FileBridge — Truyền tệp P2P & Lưu trữ E2EE Zero-Knowledge (SPC 2026)'
+                : 'FileBridge — Direct P2P & Zero-Knowledge E2EE Transfer (SPC 2026)';
         }
-    }, [progress, currentFileName, transferSpeed]);
+    }, [progress, currentFileName, transferSpeed, isVi]);
 
     // File management
     const { files, isDragging, totalBytes, handleFileSelection, handleFolderSelection, handleDeleteFile, handleDragOver, handleDragLeave, handleDrop } = useFileManagement();
@@ -598,7 +602,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                 <div className="text-center mb-6">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                         <Download className="w-3.5 h-3.5 text-blue-600" />
-                        Đang kết nối nhận tệp P2P trực tiếp
+                        {t('Đang kết nối nhận tệp P2P trực tiếp', 'Connecting to direct P2P transfer')}
                     </span>
                 </div>
             )}
@@ -609,7 +613,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     {signaling.isConnected ? (
                         <div className="flex items-center gap-1.5 text-emerald-600">
                             <Wifi className="h-4 w-4" />
-                            <span className="text-xs font-semibold">Signaling sẵn sàng</span>
+                            <span className="text-xs font-semibold">{t('Signaling sẵn sàng', 'Signaling Ready')}</span>
                             {signaling.ping > 0 && (
                                 <span className="text-[11px] text-slate-500 font-mono">
                                     ({signaling.ping}ms)
@@ -619,7 +623,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     ) : (
                         <div className="flex items-center gap-1.5 text-amber-500">
                             <Loader2 className="h-4 w-4 animate-spin" />
-                            <span className="text-xs font-medium">Đang kết nối signaling...</span>
+                            <span className="text-xs font-medium">{t('Đang kết nối signaling...', 'Connecting signaling...')}</span>
                         </div>
                     )}
                     {connectionType && (
@@ -631,19 +635,19 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             }`}
                             title={
                                 connectionType === 'direct'
-                                    ? 'Kết nối ngang hàng P2P trực tiếp (Không qua máy chủ trung gian, tốc độ tối đa theo mạng nội bộ/Internet).'
-                                    : 'Chuyển tiếp qua máy chủ TURN Relay (Tự động kích hoạt để xuyên tường lửa 4G/LTE hoặc NAT đối xứng. Tệp được mã hóa đầu-cuối an toàn 100%).'
+                                    ? t('Kết nối ngang hàng P2P trực tiếp (Không qua máy chủ trung gian, tốc độ tối đa theo mạng nội bộ/Internet).', 'Direct P2P connection (No intermediate servers, maximum local/internet bandwidth).')
+                                    : t('Chuyển tiếp qua máy chủ TURN Relay (Tự động kích hoạt để xuyên tường lửa 4G/LTE hoặc NAT đối xứng. Tệp được mã hóa đầu-cuối an toàn 100%).', 'TURN Relay transfer (Auto fallback for symmetric NAT/4G firewalls. Fully E2EE encrypted).')
                             }
                         >
                             {connectionType === 'direct' ? (
                                 <>
                                     <Zap className="w-3 h-3 text-emerald-600" />
-                                    <span>P2P Trực tiếp</span>
+                                    <span>{t('P2P Trực tiếp', 'Direct P2P')}</span>
                                 </>
                             ) : (
                                 <>
                                     <Shield className="w-3 h-3 text-blue-600" />
-                                    <span>Chuyển tiếp TURN (4G/NAT)</span>
+                                    <span>{t('Chuyển tiếp TURN (4G/NAT)', 'TURN Relay (4G/NAT)')}</span>
                                 </>
                             )}
                         </span>
@@ -655,10 +659,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                     <button
                         onClick={() => setIsQRScannerOpen(true)}
                         className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors shadow-xs"
-                        title="Quét mã QR để nhận tệp"
+                        title={t('Quét mã QR để nhận tệp', 'Scan QR code to receive files')}
                     >
                         <Camera className="w-3.5 h-3.5 text-blue-600" />
-                        <span className="hidden sm:inline">Quét QR</span>
+                        <span className="hidden sm:inline">{t('Quét QR', 'Scan QR')}</span>
                     </button>
                     <button
                         onClick={() => {
@@ -666,7 +670,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             setSoundEnabled(next);
                         }}
                         className="p-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-xs"
-                        title={soundEnabled ? 'Âm báo đang bật (Click để tắt)' : 'Âm báo đang tắt (Click để bật)'}
+                        title={soundEnabled ? t('Âm báo đang bật (Click để tắt)', 'Sound enabled (Click to mute)') : t('Âm báo đang tắt (Click để bật)', 'Sound muted (Click to unmute)')}
                     >
                         {soundEnabled ? (
                             <Volume2 className="w-4 h-4 text-blue-600" />
@@ -681,7 +685,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
             {error && (
                 <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs sm:text-sm font-medium flex items-center justify-between">
                     <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2 p-1 rounded-md hover:bg-red-100 transition-colors" title="Đóng">
+                    <button onClick={() => setError('')} className="text-red-400 hover:text-red-600 ml-2 p-1 rounded-md hover:bg-red-100 transition-colors" title={t('Đóng', 'Close')}>
                         <X className="w-4 h-4" />
                     </button>
                 </div>
@@ -702,8 +706,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         }`}
                     >
                         <Upload className="h-12 w-12 mx-auto mb-3 text-blue-600" />
-                        <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">Kéo thả tệp hoặc thư mục vào đây</p>
-                        <p className="text-xs sm:text-sm text-slate-500 mb-4">Hỗ trợ truyền nhiều tệp và cả thư mục nguyên vẹn cấu trúc. SHA-256 xác thực toàn vẹn.</p>
+                        <p className="text-base sm:text-lg font-bold text-slate-800 mb-1">
+                            {t('Kéo thả tệp hoặc thư mục vào đây', 'Drag and drop files or folders here')}
+                        </p>
+                        <p className="text-xs sm:text-sm text-slate-500 mb-4">
+                            {t('Hỗ trợ truyền nhiều tệp và cả thư mục nguyên vẹn cấu trúc. SHA-256 xác thực toàn vẹn.', 'Supports multiple files and entire folders with preserved structure. SHA-256 verified.')}
+                        </p>
                         <div className="flex flex-wrap items-center justify-center gap-3">
                             <label>
                                 <input
@@ -715,7 +723,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 <Button asChild className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md">
                                     <span className="cursor-pointer flex items-center gap-1.5">
                                         <Upload className="w-4 h-4" />
-                                        Chọn tệp tin
+                                        {t('Chọn tệp tin', 'Choose Files')}
                                     </span>
                                 </Button>
                             </label>
@@ -730,7 +738,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 <Button asChild variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50/80 shadow-xs">
                                     <span className="cursor-pointer flex items-center gap-1.5">
                                         <FolderUp className="w-4 h-4 text-blue-600" />
-                                        Chọn thư mục
+                                        {t('Chọn thư mục', 'Choose Folder')}
                                     </span>
                                 </Button>
                             </label>
@@ -739,7 +747,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 onClick={handleCreateLink}
                                 className="border-slate-200 text-slate-700 hover:text-blue-600 hover:bg-white text-xs font-semibold"
                             >
-                                Tạo phòng trước, thêm tệp sau →
+                                {t('Tạo phòng trước, thêm tệp sau →', 'Create room first, add files later →')}
                             </Button>
                         </div>
                     </div>
@@ -749,10 +757,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         <div className="mt-6 space-y-2">
                             <div className="flex justify-between items-center mb-2">
                                 <span className="text-sm font-bold text-slate-800">
-                                    {files.length} file{files.length > 1 ? 's' : ''} đã chọn
+                                    {files.length} {t('tệp đã chọn', `file${files.length > 1 ? 's' : ''} selected`)}
                                 </span>
                                 <span className="text-sm text-slate-500 font-medium">
-                                    Tổng: {formatBytes(totalBytes)}
+                                    {t('Tổng:', 'Total:')} {formatBytes(totalBytes)}
                                 </span>
                             </div>
                             {files.map((f) => (
@@ -764,7 +772,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 />
                             ))}
                             <Button onClick={handleCreateLink} className="w-full mt-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-glow-btn hover:opacity-95" size="lg">
-                                Tạo liên kết chia sẻ bảo mật (P2P)
+                                {t('Tạo liên kết chia sẻ bảo mật (P2P)', 'Create Secure Share Link (P2P)')}
                             </Button>
                         </div>
                     )}
@@ -775,14 +783,16 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             <div className="text-left w-full sm:w-auto">
                                 <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                                     <Download className="w-3.5 h-3.5 text-blue-600" />
-                                    Bạn muốn nhận tệp từ thiết bị khác?
+                                    {t('Bạn muốn nhận tệp từ thiết bị khác?', 'Want to receive files from another device?')}
                                 </h4>
-                                <p className="text-xs text-slate-500 mt-0.5">Dán mã phòng, liên kết hoặc quét mã QR bằng camera.</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    {t('Dán mã phòng, liên kết hoặc quét mã QR bằng camera.', 'Paste room code, link, or scan QR code.')}
+                                </p>
                             </div>
                             <div className="flex items-center gap-2 w-full sm:w-auto">
                                 <input
                                     type="text"
-                                    placeholder="Mã phòng hoặc link..."
+                                    placeholder={t('Mã phòng hoặc link...', 'Room code or link...')}
                                     value={manualRoomInput}
                                     onChange={(e) => setManualRoomInput(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleManualConnect()}
@@ -793,10 +803,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     size="sm"
                                     onClick={() => setIsQRScannerOpen(true)}
                                     className="bg-white hover:bg-slate-50 border-slate-200 text-slate-700 shrink-0 text-xs gap-1"
-                                    title="Quét mã QR bằng Camera"
+                                    title={t('Quét mã QR bằng Camera', 'Scan QR code with Camera')}
                                 >
                                     <Camera className="w-3.5 h-3.5 text-blue-600" />
-                                    <span className="hidden sm:inline">Quét</span>
+                                    <span className="hidden sm:inline">{t('Quét', 'Scan')}</span>
                                 </Button>
                                 <Button
                                     size="sm"
@@ -804,7 +814,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     disabled={!manualRoomInput.trim()}
                                     className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 text-xs"
                                 >
-                                    Nhận
+                                    {t('Nhận', 'Receive')}
                                 </Button>
                             </div>
                         </div>
@@ -819,7 +829,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                                 <Check className="h-5 w-5 text-emerald-600" />
-                                <span className="font-bold text-slate-800">Liên kết chia sẻ đã sẵn sàng!</span>
+                                <span className="font-bold text-slate-800">{t('Liên kết chia sẻ đã sẵn sàng!', 'Share link is ready!')}</span>
                             </div>
                             <Button
                                 variant="outline"
@@ -828,11 +838,14 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 className="gap-1.5 text-xs text-slate-700 border-slate-200 hover:bg-slate-50"
                             >
                                 <QrCode className="w-3.5 h-3.5 text-blue-600" />
-                                {showSenderQR ? 'Ẩn mã QR' : 'Hiện mã QR'}
+                                {showSenderQR ? t('Ẩn mã QR', 'Hide QR') : t('Hiện mã QR', 'Show QR')}
                             </Button>
                         </div>
                         <p className="text-xs text-slate-500 mb-4">
-                            Gửi liên kết này cho người nhận hoặc cho họ quét mã QR. Mã phòng được lưu trong URL fragment, không bao giờ gửi đến máy chủ.
+                            {t(
+                                'Gửi liên kết này cho người nhận hoặc cho họ quét mã QR. Mã phòng được lưu trong URL fragment, không bao giờ gửi đến máy chủ.',
+                                'Share this link or let them scan the QR code. Room secret is preserved in URL fragment and never touches the server.'
+                            )}
                         </p>
                         <div className="flex gap-2">
                             <input
@@ -845,12 +858,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 {isCopying ? (
                                     <>
                                         <Check className="h-4 w-4 text-emerald-600" />
-                                        <span className="text-xs text-emerald-600">Đã chép</span>
+                                        <span className="text-xs text-emerald-600">{t('Đã chép', 'Copied')}</span>
                                     </>
                                 ) : (
                                     <>
                                         <Copy className="h-4 w-4" />
-                                        <span className="text-xs">Sao chép</span>
+                                        <span className="text-xs">{t('Sao chép', 'Copy')}</span>
                                     </>
                                 )}
                             </Button>
@@ -863,7 +876,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     <QRCodeSVG value={generatedLink} size={180} level="M" />
                                 </div>
                                 <span className="text-xs font-medium text-slate-600 mt-2">
-                                    Người nhận dùng Camera điện thoại hoặc tính năng "Quét QR" trên FileBridge để kết nối tức thì
+                                    {t(
+                                        'Người nhận dùng Camera điện thoại hoặc tính năng "Quét QR" trên FileBridge để kết nối tức thì',
+                                        'The receiver scans with their phone camera or FileBridge "Scan QR" to connect instantly'
+                                    )}
                                 </span>
                             </div>
                         )}
@@ -881,8 +897,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 </div>
                                 {transferSpeed && (
                                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                        <span>Tốc độ: <strong className="text-slate-700">{transferSpeed}</strong></span>
-                                        <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
+                                        <span>{t('Tốc độ:', 'Speed:')} <strong className="text-slate-700">{transferSpeed}</strong></span>
+                                        <span>{t('Ước tính:', 'ETA:')} <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
                                 <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} isComplete={progress === 100} />
@@ -895,13 +911,13 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                             <div>
                                 <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                                    <span>Tệp đang chia sẻ</span>
+                                    <span>{t('Tệp đang chia sẻ', 'Shared Files')}</span>
                                     <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-mono font-bold border border-blue-200/80">
-                                        {files.length} {files.length > 1 ? 'tệp' : 'tệp'}
+                                        {files.length} {t('tệp', 'files')}
                                     </span>
                                 </h3>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                    Tổng dung lượng: <strong className="text-slate-700">{formatBytes(totalBytes)}</strong>
+                                    {t('Tổng dung lượng:', 'Total size:')} <strong className="text-slate-700">{formatBytes(totalBytes)}</strong>
                                 </p>
                             </div>
 
@@ -923,7 +939,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     >
                                         <span>
                                             <Plus className="w-3.5 h-3.5" />
-                                            Thêm tệp
+                                            {t('Thêm tệp', 'Add Files')}
                                         </span>
                                     </Button>
                                 </label>
@@ -945,7 +961,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                     >
                                         <span>
                                             <FolderUp className="w-3.5 h-3.5 text-blue-600" />
-                                            Thêm thư mục
+                                            {t('Thêm thư mục', 'Add Folder')}
                                         </span>
                                     </Button>
                                 </label>
@@ -973,8 +989,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 />
                                 <Upload className="w-4 h-4 text-blue-600" />
                                 <span>
-                                    Kéo thả thêm tệp hoặc thư mục vào đây hoặc{' '}
-                                    <strong className="text-blue-600 hover:underline">duyệt từ máy</strong>
+                                    {t('Kéo thả thêm tệp hoặc thư mục vào đây hoặc', 'Drag and drop more files or folders here or')}{' '}
+                                    <strong className="text-blue-600 hover:underline">{t('duyệt từ máy', 'browse files')}</strong>
                                 </span>
                             </label>
                         </div>
@@ -995,7 +1011,10 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             </div>
                         ) : (
                             <div className="py-6 text-center text-xs text-slate-400">
-                                Chưa có tệp nào được chọn. Nhấn <strong>+ Thêm tệp</strong> hoặc kéo thả file vào khung trên.
+                                {t(
+                                    'Chưa có tệp nào được chọn. Nhấn + Thêm tệp hoặc kéo thả file vào khung trên.',
+                                    'No files selected yet. Click + Add Files or drag files into the box above.'
+                                )}
                             </div>
                         )}
                     </div>
@@ -1009,7 +1028,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                             className="text-xs text-slate-500 hover:text-red-600 hover:bg-red-50 gap-1.5 transition-colors"
                         >
                             <RotateCcw className="w-3.5 h-3.5" />
-                            Đóng phòng & Tạo phiên mới
+                            {t('Đóng phòng & Tạo phiên mới', 'Close room & Start new session')}
                         </Button>
                     </div>
                 </div>
@@ -1022,11 +1041,11 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                                 <Download className="h-5 w-5 text-blue-600" />
-                                <span className="font-bold text-slate-800">Đang nhận tệp P2P</span>
+                                <span className="font-bold text-slate-800">{t('Đang nhận tệp P2P', 'Receiving P2P Files')}</span>
                             </div>
                             <div className="flex items-center gap-1.5 text-xs text-slate-500">
                                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                                <span>Xác thực SHA-256</span>
+                                <span>{t('Xác thực SHA-256', 'SHA-256 Verified')}</span>
                             </div>
                         </div>
                         <p className="text-center font-semibold text-slate-800 mb-4">{status}</p>
@@ -1040,8 +1059,8 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 </div>
                                 {transferSpeed && (
                                     <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                        <span>Tốc độ: <strong className="text-slate-700">{transferSpeed}</strong></span>
-                                        <span>Ước tính: <strong className="text-slate-700">{estimatedTime}</strong></span>
+                                        <span>{t('Tốc độ:', 'Speed:')} <strong className="text-slate-700">{transferSpeed}</strong></span>
+                                        <span>{t('Ước tính:', 'ETA:')} <strong className="text-slate-700">{estimatedTime}</strong></span>
                                     </div>
                                 )}
                                 <SpeedWaveform currentBps={currentBps} isActive={progress > 0 && progress < 100} isComplete={progress === 100} />
@@ -1054,12 +1073,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                 <div className="flex items-center justify-between gap-3 flex-wrap">
                                     <div>
                                         <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                                            <span>Tệp đã nhận ({receivedFiles.length})</span>
+                                            <span>{t('Tệp đã nhận', 'Received Files')} ({receivedFiles.length})</span>
                                             <span className="text-xs font-normal text-slate-500">
                                                 ({formatBytes(receivedFiles.reduce((sum, f) => sum + (f.fileSize || f.blob?.size || 0), 0))})
                                             </span>
                                         </h3>
-                                        <span className="text-[11px] font-normal text-slate-400">Toàn vẹn mật mã SHA-256</span>
+                                        <span className="text-[11px] font-normal text-slate-400">{t('Toàn vẹn mật mã SHA-256', 'SHA-256 Integrity Verified')}</span>
                                     </div>
                                     {receivedFiles.length >= 2 && (
                                         <Button
@@ -1072,12 +1091,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                             {isZipping ? (
                                                 <>
                                                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                    <span>Đang nén {zipProgress ? `${zipProgress.percent}%` : '...'}</span>
+                                                    <span>{t('Đang nén', 'Zipping')} {zipProgress ? `${zipProgress.percent}%` : '...'}</span>
                                                 </>
                                             ) : (
                                                 <>
                                                     <Archive className="w-3.5 h-3.5" />
-                                                    <span>Tải toàn bộ (.zip)</span>
+                                                    <span>{t('Tải toàn bộ (.zip)', 'Download All (.zip)')}</span>
                                                 </>
                                             )}
                                         </Button>
@@ -1122,7 +1141,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                                         rel="noopener noreferrer"
                                                     >
                                                         <Download className="w-3.5 h-3.5" />
-                                                        Tải về
+                                                        {t('Tải về', 'Download')}
                                                     </a>
                                                 </Button>
                                                 {typeof navigator !== 'undefined' && typeof navigator.share === 'function' && (
@@ -1132,7 +1151,7 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                                         size="sm"
                                                         onClick={() => handleDownload(f)}
                                                         className="px-2.5 text-slate-700 hover:text-blue-600 hover:bg-blue-50 border-slate-200"
-                                                        title="Lưu hoặc chia sẻ sang ứng dụng khác (Zalo, Tệp, Photos...)"
+                                                        title={t('Lưu hoặc chia sẻ sang ứng dụng khác (Zalo, Tệp, Photos...)', 'Save or share to other apps')}
                                                     >
                                                         <Share2 className="w-3.5 h-3.5" />
                                                     </Button>
@@ -1146,12 +1165,12 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                                 {f.checksumVerified === true ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-medium border border-emerald-300">
                                                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                                                        SHA-256: {formatHashShort(f.checksum)} (Toàn vẹn 100%)
+                                                        SHA-256: {formatHashShort(f.checksum)} ({t('Toàn vẹn 100%', '100% Verified')})
                                                     </span>
                                                 ) : f.checksumVerified === false ? (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-red-100 text-red-800 font-medium border border-red-300">
                                                         <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
-                                                        Cảnh báo SHA-256 không khớp!
+                                                        {t('Cảnh báo SHA-256 không khớp!', 'Warning: SHA-256 mismatch!')}
                                                     </span>
                                                 ) : (
                                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
@@ -1166,9 +1185,9 @@ export default function P2PTransfer({ className }: P2PTransferProps) {
                                                         }
                                                     }}
                                                     className="text-slate-400 hover:text-slate-700 text-[11px] underline ml-auto cursor-pointer"
-                                                    title={`Sao chép mã SHA-256: ${f.checksum}`}
+                                                    title={t(`Sao chép mã SHA-256: ${f.checksum}`, `Copy SHA-256 hash: ${f.checksum}`)}
                                                 >
-                                                    Sao chép hash
+                                                    {t('Sao chép hash', 'Copy hash')}
                                                 </button>
                                             </div>
                                         )}

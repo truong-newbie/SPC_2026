@@ -34,6 +34,7 @@ import {
     FolderUp,
 } from 'lucide-react';
 import { getFilesFromDataTransfer, getFilesFromInput } from '@/lib/directory';
+import { useLanguage } from '@/lib/i18n';
 
 interface SwarmTransferProps {
     className?: string;
@@ -48,6 +49,8 @@ interface SwarmFileInfo {
 }
 
 export default function SwarmTransfer({ className, socketUrl }: SwarmTransferProps) {
+    const { t, isVi } = useLanguage();
+
     // Connection state
     const [isConnected, setIsConnected] = useState(false);
     const [isHosting, setIsHosting] = useState(false);
@@ -628,15 +631,15 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         <Share2 className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900">Swarm File Sharing</h2>
+                        <h2 className="text-xl font-bold text-gray-900">{t('Chia sẻ file đa điểm (Swarm)', 'Swarm File Sharing')}</h2>
                         <p className="text-sm text-gray-500">
-                            P2P multi-peer transfer • Multi-file support
+                            {t('Mạng lưới P2P đa điểm • Tối ưu chia sẻ nhiều file', 'P2P multi-peer transfer • Multi-file support')}
                         </p>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
                     <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-amber-500 animate-pulse'}`} />
-                    {isConnected ? 'Server Online' : 'Connecting...'}
+                    {isConnected ? t('Máy chủ trực tuyến', 'Server Online') : t('Đang kết nối...', 'Connecting...')}
                 </div>
             </div>
 
@@ -650,11 +653,11 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     <div className="flex items-center gap-4 text-sm font-semibold">
                         <div className="flex items-center gap-1.5 text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
                             <Users className="w-4 h-4" />
-                            <span>{peersCount} peers</span>
+                            <span>{peersCount} {t('người tham gia', 'peers')}</span>
                         </div>
                         <div className="flex items-center gap-1.5 text-green-700 bg-green-50 px-2.5 py-1 rounded-lg">
                             <span className="w-2 h-2 bg-green-500 rounded-full" />
-                            <span>{seedsCount} seeds</span>
+                            <span>{seedsCount} {t('nguồn (seed)', 'seeds')}</span>
                         </div>
                     </div>
                 </div>
@@ -678,10 +681,10 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             </div>
                             <div>
                                 <h3 className="text-lg font-bold text-gray-900 break-all">
-                                    {downloadFileInfo?.name || 'File in Swarm'}
+                                    {downloadFileInfo?.name || t('Tệp trong Swarm', 'File in Swarm')}
                                 </h3>
                                 <p className="text-sm text-gray-500 mt-0.5">
-                                    {downloadFileInfo?.size ? formatBytes(downloadFileInfo.size) : 'Detecting size...'} • {downloadFileInfo?.totalPieces || 1} pieces
+                                    {downloadFileInfo?.size ? formatBytes(downloadFileInfo.size) : t('Đang kiểm tra dung lượng...', 'Detecting size...')} • {downloadFileInfo?.totalPieces || 1} {t('mảnh', 'pieces')}
                                 </p>
                             </div>
                         </div>
@@ -690,7 +693,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 ? 'bg-green-100 text-green-700'
                                 : 'bg-blue-100 text-blue-700 animate-pulse'
                         }`}>
-                            {progress === 100 ? 'Downloaded' : 'Downloading'}
+                            {progress === 100 ? t('Đã tải xong', 'Downloaded') : t('Đang tải về', 'Downloading')}
                         </span>
                     </div>
 
@@ -698,7 +701,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     <div className="space-y-2">
                         <div className="flex justify-between text-sm">
                             <span className="font-medium text-gray-700">
-                                {progress === 100 ? 'Download Finished' : 'Transfer Progress'}
+                                {progress === 100 ? t('Tải hoàn tất', 'Download Finished') : t('Tiến trình truyền tải', 'Transfer Progress')}
                             </span>
                             <span className="font-bold text-blue-600">{progress}%</span>
                         </div>
@@ -706,10 +709,10 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         <div className="flex justify-between text-xs text-gray-500 pt-1">
                             <span>
                                 {downloadFileInfo?.totalPieces
-                                    ? `${Math.round((progress / 100) * downloadFileInfo.totalPieces)} / ${downloadFileInfo.totalPieces} pieces`
+                                    ? `${Math.round((progress / 100) * downloadFileInfo.totalPieces)} / ${downloadFileInfo.totalPieces} ${t('mảnh', 'pieces')}`
                                     : ''}
                             </span>
-                            <span>{seedsCount > 0 ? `${seedsCount} seeder(s) active` : 'Searching for seeds...'}</span>
+                            <span>{seedsCount > 0 ? `${seedsCount} ${t('nguồn (seed) đang hoạt động', 'seeder(s) active')}` : t('Đang tìm nguồn chia sẻ...', 'Searching for seeds...')}</span>
                         </div>
                     </div>
 
@@ -720,7 +723,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 <div className="flex items-center gap-2">
                                     <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
                                         <Files className="w-4 h-4 text-blue-600" />
-                                        Received Files ({unpackedFiles.length}):
+                                        {t('Tệp đã nhận', 'Received Files')} ({unpackedFiles.length}):
                                     </h4>
                                     <span className="text-xs text-gray-500">
                                         ({formatSize(unpackedFiles.reduce((sum, f) => sum + f.size, 0))})
@@ -736,12 +739,12 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                         {isZipping ? (
                                             <>
                                                 <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
-                                                {zipProgress ? `${zipProgress.percent}%` : 'Zipping...'}
+                                                {zipProgress ? `${zipProgress.percent}%` : t('Đang nén...', 'Zipping...')}
                                             </>
                                         ) : (
                                             <>
                                                 <Archive className="w-3.5 h-3.5 mr-1" />
-                                                ZIP All ({formatSize(unpackedFiles.reduce((sum, f) => sum + f.size, 0))})
+                                                {t('Nén tất cả ZIP', 'ZIP All')} ({formatSize(unpackedFiles.reduce((sum, f) => sum + f.size, 0))})
                                             </>
                                         )}
                                     </Button>
@@ -778,7 +781,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                             className="bg-blue-600 hover:bg-blue-700 text-white shrink-0 ml-3"
                                         >
                                             <Download className="w-3.5 h-3.5 mr-1" />
-                                            Save
+                                            {t('Lưu', 'Save')}
                                         </Button>
                                     </div>
                                 ))}
@@ -794,7 +797,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-xl transition-colors shadow-sm"
                         >
                             <ArrowDownToLine className="w-5 h-5" />
-                            Save File to Computer
+                            {t('Lưu file về máy', 'Save File to Computer')}
                         </a>
                     )}
 
@@ -804,7 +807,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             variant="outline"
                             className="w-full text-gray-700"
                         >
-                            {progress === 100 ? 'Leave Swarm' : 'Cancel Download'}
+                            {progress === 100 ? t('Rời phòng Swarm', 'Leave Swarm') : t('Hủy tải về', 'Cancel Download')}
                         </Button>
                     </div>
                 </div>
@@ -824,17 +827,17 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 <div>
                                     <h3 className="font-bold text-gray-900 break-all">
                                         {hostedFiles.length > 1
-                                            ? `${hostedFiles.length} files (${formatBytes(hostedTotalSize)})`
+                                            ? `${hostedFiles.length} ${t('tập tin', 'files')} (${formatBytes(hostedTotalSize)})`
                                             : selectedFiles[0]?.name}
                                     </h3>
                                     <p className="text-sm text-gray-600">
-                                        Seeding to swarm • Sharing with peers
+                                        {t('Đang làm trạm nguồn (Seeding) • Chia sẻ cho người khác', 'Seeding to swarm • Sharing with peers')}
                                     </p>
                                 </div>
                             </div>
                             <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
                                 <span className="w-2 h-2 bg-green-500 rounded-full animate-ping" />
-                                Seeding Active
+                                {t('Đang phát tệp', 'Seeding Active')}
                             </span>
                         </div>
 
@@ -855,14 +858,14 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             <div className="space-y-3 mt-4 pt-4 border-t border-green-200">
                                 <div className="flex items-center gap-2 text-green-800 text-sm font-semibold">
                                     <Lock className="w-4 h-4" />
-                                    <span>Share this link for others to preview & download:</span>
+                                    <span>{t('Chia sẻ link này để người khác xem trước & tải về:', 'Share this link for others to preview & download:')}</span>
                                 </div>
                                 <div className="bg-white rounded-lg p-3 font-mono text-xs text-gray-800 border border-green-200 break-all select-all">
                                     {shareLink}
                                 </div>
                                 {password && (
                                     <div className="text-xs text-green-800 font-medium">
-                                        Password: <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{password}</span>
+                                        {t('Mật khẩu:', 'Password:')} <span className="font-mono bg-white px-2 py-0.5 rounded border border-green-200">{password}</span>
                                     </div>
                                 )}
                                 <Button
@@ -872,12 +875,12 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                     {isCopied ? (
                                         <>
                                             <Check className="w-4 h-4 mr-2" />
-                                            Copied to Clipboard!
+                                            {t('Đã sao chép vào bộ nhớ tạm!', 'Copied to Clipboard!')}
                                         </>
                                     ) : (
                                         <>
                                             <Copy className="w-4 h-4 mr-2" />
-                                            Copy Share Link
+                                            {t('Sao chép link chia sẻ', 'Copy Share Link')}
                                         </>
                                     )}
                                 </Button>
@@ -890,7 +893,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         className="w-full text-red-600 border-red-200 hover:bg-red-50"
                         variant="outline"
                     >
-                        Stop Hosting
+                        {t('Dừng phát tệp', 'Stop Hosting')}
                     </Button>
                 </div>
             )}
@@ -908,27 +911,27 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             <div>
                                 <div className="flex items-center gap-2">
                                     <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded uppercase tracking-wider">
-                                        File Preview
+                                        {t('Xem trước tệp', 'File Preview')}
                                     </span>
                                 </div>
                                 <h3 className="text-lg font-bold text-gray-900 mt-1 break-all">
                                     {previewFileInfo.name}
                                 </h3>
                                 <p className="text-sm text-gray-500 mt-0.5">
-                                    {previewFileInfo.size ? formatBytes(previewFileInfo.size) : 'Unknown size'} • {previewFileInfo.totalPieces} pieces
+                                    {previewFileInfo.size ? formatBytes(previewFileInfo.size) : t('Chưa rõ dung lượng', 'Unknown size')} • {previewFileInfo.totalPieces} {t('mảnh', 'pieces')}
                                 </p>
                             </div>
                         </div>
                         <span className="flex items-center gap-1.5 px-3 py-1 bg-green-100 text-green-800 text-xs font-semibold rounded-full">
                             <span className="w-2 h-2 bg-green-500 rounded-full" />
-                            {seedsCount > 0 ? `${seedsCount} Seeds Available` : 'Swarm Active'}
+                            {seedsCount > 0 ? `${seedsCount} ${t('Nguồn sẵn sàng', 'Seeds Available')}` : t('Swarm sẵn sàng', 'Swarm Active')}
                         </span>
                     </div>
 
                     <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-600 space-y-1 border border-gray-200">
-                        <p className="font-medium text-gray-800">Ready to download via P2P Swarm?</p>
+                        <p className="font-medium text-gray-800">{t('Sẵn sàng tải về qua mạng P2P Swarm?', 'Ready to download via P2P Swarm?')}</p>
                         <p className="text-xs text-gray-500">
-                            Files will be transferred in pieces directly from active seeders in the room.
+                            {t('Tệp sẽ được chia nhỏ và truyền trực tiếp từ các trạm nguồn trong phòng.', 'Files will be transferred in pieces directly from active seeders in the room.')}
                         </p>
                     </div>
 
@@ -939,14 +942,14 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                             className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 text-base font-semibold"
                         >
                             <Download className="w-5 h-5 mr-2" />
-                            Download Now
+                            {t('Tải xuống ngay', 'Download Now')}
                         </Button>
                         <Button
                             onClick={handleCancelPreview}
                             variant="outline"
                             className="text-gray-700 px-5"
                         >
-                            Cancel
+                            {t('Hủy', 'Cancel')}
                         </Button>
                     </div>
                 </div>
@@ -971,13 +974,13 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                         <Upload className="w-12 h-12 mx-auto text-blue-500 mb-3" />
                         <p className="font-semibold text-gray-800 mb-1">
                             {selectedFiles.length > 0
-                                ? `${selectedFiles.length} item${selectedFiles.length > 1 ? 's' : ''} selected`
-                                : 'Drop files or folders here to host on Swarm'}
+                                ? `${selectedFiles.length} ${t('mục đã chọn', `item${selectedFiles.length > 1 ? 's' : ''} selected`)}`
+                                : t('Kéo thả tệp hoặc thư mục vào đây để làm trạm Swarm', 'Drop files or folders here to host on Swarm')}
                         </p>
                         <p className="text-sm text-gray-500">
                             {selectedFiles.length > 0
-                                ? `${formatBytes(totalSelectedBytes)} total`
-                                : 'Preserves complete folder directory structures across peers'}
+                                ? `${formatBytes(totalSelectedBytes)} ${t('tổng dung lượng', 'total')}`
+                                : t('Giữ nguyên cấu trúc cây thư mục giữa các máy nhận', 'Preserves complete folder directory structures across peers')}
                         </p>
 
                         <input
@@ -1004,7 +1007,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
                             >
                                 <Upload className="w-3.5 h-3.5" />
-                                Browse Files
+                                {t('Chọn tệp', 'Browse Files')}
                             </Button>
                             <Button
                                 type="button"
@@ -1014,7 +1017,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 className="border-gray-300 text-gray-700 hover:bg-gray-100 gap-1.5 shadow-xs cursor-pointer text-xs font-semibold px-3 py-1.5"
                             >
                                 <FolderUp className="w-3.5 h-3.5 text-blue-600" />
-                                Browse Folder
+                                {t('Chọn thư mục', 'Browse Folder')}
                             </Button>
                         </div>
 
@@ -1056,7 +1059,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                                     handleRemoveFile(idx);
                                                 }}
                                                 className="p-1 text-gray-400 hover:text-red-500 rounded transition-colors"
-                                                title="Remove file"
+                                                title={t('Xóa tệp', 'Remove file')}
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
@@ -1074,14 +1077,14 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                     className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                                 >
                                     <Upload className="w-4 h-4 mr-2" />
-                                    Start Hosting {selectedFiles.length} File{selectedFiles.length > 1 ? 's' : ''} ({formatBytes(totalSelectedBytes)})
+                                    {t('Bắt đầu làm trạm phát', 'Start Hosting')} {selectedFiles.length} {t('tệp', `File${selectedFiles.length > 1 ? 's' : ''}`)} ({formatBytes(totalSelectedBytes)})
                                 </Button>
                                 <Button
                                     onClick={handleClearFiles}
                                     variant="outline"
                                     className="text-gray-600 hover:text-red-600"
                                 >
-                                    Clear
+                                    {t('Xóa tất cả', 'Clear')}
                                 </Button>
                             </div>
                         )}
@@ -1091,13 +1094,13 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                     <div className="pt-6 border-t border-gray-200">
                         <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
                             <Download className="w-4 h-4 text-blue-600" />
-                            Download from Swarm
+                            {t('Tải từ phòng Swarm', 'Download from Swarm')}
                         </h3>
 
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder="Paste swarm share link or swarm room ID..."
+                                placeholder={t('Dán liên kết chia sẻ hoặc ID phòng Swarm...', 'Paste swarm share link or swarm room ID...')}
                                 value={downloadLink}
                                 onChange={(e) => setDownloadLink(e.target.value)}
                                 onKeyDown={(e) => {
@@ -1111,7 +1114,7 @@ export default function SwarmTransfer({ className, socketUrl }: SwarmTransferPro
                                 className="bg-blue-600 hover:bg-blue-700 text-white px-5"
                             >
                                 <Search className="w-4 h-4 mr-2" />
-                                Preview
+                                {t('Xem trước', 'Preview')}
                             </Button>
                         </div>
                     </div>

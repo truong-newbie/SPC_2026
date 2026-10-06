@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { PWAInstallButton } from '@/components/PWAInstallButton';
+import { useLanguage } from '@/lib/i18n';
 import {
     Zap,
     Users,
@@ -58,8 +59,8 @@ const StoredTransfer = dynamic(() => import('@/components/StoredTransfer'), {
 type TransferMode = 'p2p' | 'swarm' | 'stored';
 
 export default function Home() {
+    const { lang, isVi, setLang, toggleLang, t } = useLanguage();
     const [transferMode, setTransferMode] = useState<TransferMode>('p2p');
-    const [currentLang, setCurrentLang] = useState<'vi' | 'en'>('vi');
     const [faqOpen, setFaqOpen] = useState<{ [key: number]: boolean }>({ 1: true });
 
     useEffect(() => {
@@ -81,8 +82,6 @@ export default function Home() {
     const toggleFaq = (id: number) => {
         setFaqOpen((prev) => ({ ...prev, [id]: !prev[id] }));
     };
-
-    const isVi = currentLang === 'vi';
 
     return (
         <div className="flex flex-col min-h-screen relative">
@@ -157,14 +156,32 @@ export default function Home() {
                             <span>{isVi ? '• Sẵn sàng gửi' : '• Ready'}</span>
                         </div>
 
-                        <button
-                            onClick={() => setCurrentLang(isVi ? 'en' : 'vi')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 hover:border-blue-400 bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 transition-all shadow-xs whitespace-nowrap"
-                            title={isVi ? 'Chuyển sang Tiếng Anh' : 'Switch to Vietnamese'}
-                        >
-                            <Globe className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{isVi ? 'VIE' : 'ENG'}</span>
-                        </button>
+                        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-[11px] font-bold shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setLang('vi')}
+                                className={`px-2 py-1 rounded-md transition-all ${
+                                    isVi
+                                        ? 'bg-white text-blue-600 shadow-xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                                title="Tiếng Việt"
+                            >
+                                VIE
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setLang('en')}
+                                className={`px-2 py-1 rounded-md transition-all ${
+                                    !isVi
+                                        ? 'bg-white text-blue-600 shadow-xs'
+                                        : 'text-slate-500 hover:text-slate-800'
+                                }`}
+                                title="English"
+                            >
+                                ENG
+                            </button>
+                        </div>
                     </div>
                 </div>
             </header>
