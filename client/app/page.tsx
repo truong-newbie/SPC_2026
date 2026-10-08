@@ -52,12 +52,15 @@ const StoredTransfer = dynamic(() => import('@/components/StoredTransfer'), {
     ),
 });
 
+import { LegalModal } from '@/components/LegalModal';
+
 type TransferMode = 'p2p' | 'swarm' | 'stored';
 
 export default function Home() {
     const { lang, isVi, setLang, toggleLang, t } = useLanguage();
     const [transferMode, setTransferMode] = useState<TransferMode>('p2p');
     const [faqOpen, setFaqOpen] = useState<{ [key: number]: boolean }>({});
+    const [legalModalType, setLegalModalType] = useState<'privacy' | 'terms' | null>(null);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -424,13 +427,36 @@ export default function Home() {
             <footer className="bg-white border-t border-slate-200 py-6">
                 <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-slate-400">
                     <span>FileBridge — {isVi ? 'Sản phẩm SPC 2026' : 'SPC 2026 Product'}</span>
-                    <div className="flex items-center gap-4">
-                        <a href="https://github.com/truong-newbie/SPC_2026" target="_blank" rel="noreferrer" className="hover:text-slate-600">GitHub</a>
-                        <a href="#security" className="hover:text-slate-600">{isVi ? 'Bảo mật' : 'Security'}</a>
-                        <a href="#faq" className="hover:text-slate-600">FAQ</a>
+                    <div className="flex flex-wrap items-center justify-center gap-3.5 sm:gap-4">
+                        <a href="https://github.com/truong-newbie/SPC_2026" target="_blank" rel="noreferrer" className="hover:text-slate-600 transition-colors">GitHub</a>
+                        <a href="#security" className="hover:text-slate-600 transition-colors">{isVi ? 'Bảo mật' : 'Security'}</a>
+                        <a href="#faq" className="hover:text-slate-600 transition-colors">FAQ</a>
+                        <span className="text-slate-200">|</span>
+                        <button
+                            type="button"
+                            onClick={() => setLegalModalType('privacy')}
+                            className="hover:text-slate-700 transition-colors cursor-pointer font-medium text-slate-500"
+                        >
+                            {isVi ? 'Quyền riêng tư (Privacy)' : 'Privacy Policy'}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setLegalModalType('terms')}
+                            className="hover:text-slate-700 transition-colors cursor-pointer font-medium text-slate-500"
+                        >
+                            {isVi ? 'Điều khoản (Terms)' : 'Terms of Service'}
+                        </button>
                     </div>
                 </div>
             </footer>
+
+            {/* Legal Modal (Privacy & Terms) */}
+            <LegalModal
+                isOpen={!!legalModalType}
+                type={legalModalType}
+                onClose={() => setLegalModalType(null)}
+                onSwitchType={(type) => setLegalModalType(type)}
+            />
         </div>
     );
 }
